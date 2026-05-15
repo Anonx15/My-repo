@@ -2,9 +2,7 @@ name: Build Ghostty RPM
 
 on:
   workflow_dispatch:
-  push:
-    branches: [ main ]
-
+  
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -69,6 +67,7 @@ jobs:
             -Doptimize=ReleaseFast \
             -Dcpu=bdver2 \
             -Dpie=false \
+            -Dstrip=true \
             -Dfont-backend=fontconfig_freetype \
             -Dgtk-x11=false \
             -Dgtk-wayland=true \
