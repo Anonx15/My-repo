@@ -21,10 +21,10 @@ jobs:
             tar \
             rpm-build \
             rpmdevtools \
+            scdoc \
             gtk4-devel \
             libadwaita-devel \
             gtk4-layer-shell-devel \
-            freetype-devel \
             fontconfig-devel \
             harfbuzz-devel \
             wayland-devel \
@@ -73,12 +73,13 @@ jobs:
             -fsys=gtk4-layer-shell \
             -p $PWD/output
 
+      - name: Verify build output
+        working-directory: ghostty
+        run: find output/ -type f | sort
+
       - name: Create Spec File and Prepare Sources
         run: |
-          # نسخ المخرجات إلى مجلد rpmbuild
           cp -r ghostty/output ~/rpmbuild/SOURCES/output
-          
-          # إنشاء ملف spec برمجياً
           cat << 'EOF' > ~/rpmbuild/SPECS/ghostty.spec
           Name:           ghostty
           Version:        1.3.1
@@ -106,17 +107,32 @@ jobs:
           Wayland-only build targeting Sway WM on Fedora 44.
 
           %install
-          install -Dm755 %{_sourcedir}/output/bin/ghostty %{buildroot}/usr/bin/ghostty
-          install -Dm644 %{_sourcedir}/output/share/applications/com.mitchellh.ghostty.desktop %{buildroot}/usr/share/applications/com.mitchellh.ghostty.desktop
-          install -Dm644 %{_sourcedir}/output/share/man/man1/ghostty.1 %{buildroot}/usr/share/man/man1/ghostty.1
-          install -Dm644 %{_sourcedir}/output/share/terminfo/g/ghostty %{buildroot}/usr/share/terminfo/g/ghostty
-          cp -r %{_sourcedir}/output/share/icons %{buildroot}/usr/share/icons
-          cp -r %{_sourcedir}/output/share/ghostty %{buildroot}/usr/share/ghostty
+          install -Dm755 %{_sourcedir}/output/bin/ghostty \
+                         %{buildroot}/usr/bin/ghostty
+
+          install -Dm644 %{_sourcedir}/output/share/applications/com.mitchellh.ghostty.desktop \
+                         %{buildroot}/usr/share/applications/com.mitchellh.ghostty.desktop
+
+          install -Dm644 %{_sourcedir}/output/share/man/man1/ghostty.1 \
+                         %{buildroot}/usr/share/man/man1/ghostty.1
+
+          install -Dm644 %{_sourcedir}/output/share/man/man5/ghostty.5 \
+                         %{buildroot}/usr/share/man/man5/ghostty.5
+
+          install -Dm644 %{_sourcedir}/output/share/terminfo/g/ghostty \
+                         %{buildroot}/usr/share/terminfo/g/ghostty
+
+          cp -r %{_sourcedir}/output/share/icons \
+                %{buildroot}/usr/share/icons
+
+          cp -r %{_sourcedir}/output/share/ghostty \
+                %{buildroot}/usr/share/ghostty
 
           %files
           %attr(755, root, root) /usr/bin/ghostty
           /usr/share/applications/com.mitchellh.ghostty.desktop
           /usr/share/man/man1/ghostty.1
+          /usr/share/man/man5/ghostty.5
           /usr/share/terminfo/g/ghostty
           /usr/share/icons/
           /usr/share/ghostty/
@@ -125,10 +141,17 @@ jobs:
           tic -x /usr/share/terminfo/g/ghostty 2>/dev/null || true
           update-desktop-database /usr/share/applications 2>/dev/null || true
           gtk-update-icon-cache /usr/share/icons/hicolor 2>/dev/null || true
-          
+
           %postun
           update-desktop-database /usr/share/applications 2>/dev/null || true
           gtk-update-icon-cache /usr/share/icons/hicolor 2>/dev/null || true
+
+          %changelog
+          * Thu May 15 2025 GitHub Actions <actions@github.com> - 1.3.1-1
+          - ReleaseFast build for AMD FX-4320 (bdver2)
+          - Wayland-only, Sway WM optimized
+          - Font backend: fontconfig_freetype
+          - Renderer: OpenGL
           EOF
 
       - name: Build RPM
