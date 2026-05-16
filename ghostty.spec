@@ -11,7 +11,7 @@ Requires:       gtk4-layer-shell
 Requires:       fontconfig
 Requires:       harfbuzz
 Requires:       libxkbcommon
-Requires:       wayland-libs-client
+Requires:       wayland-libs
 
 Conflicts:      ghostty
 
