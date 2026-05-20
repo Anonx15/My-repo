@@ -1,0 +1,59 @@
+name: Build ironbar — AMD FX-4320 (Sway)
+
+on:
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: "-C target-cpu=bdver2"
+  # تحسينات البروفايل يتم حقنها مباشرة هنا دون المساس بملفات المستودع
+  CARGO_PROFILE_RELEASE_OPT_LEVEL: "3"
+  CARGO_PROFILE_RELEASE_LTO: "fat"
+  CARGO_PROFILE_RELEASE_CODEGEN_UNITS: "1"
+  CARGO_PROFILE_RELEASE_PANIC: "abort"
+  CARGO_PROFILE_RELEASE_STRIP: "true"
+  CARGO_PROFILE_RELEASE_DEBUG: "false"
+jobs:
+  build:
+    name: Minimal Compilation Environment
+    runs-on: ubuntu-latest
+    container:
+      image: archlinux:latest
+
+    steps:
+      - name: Checkout Source
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Install Absolute Bare Minimum Build Deps
+        run: |
+          pacman -Syu --noconfirm
+          pacman -S --noconfirm --needed \
+            base-devel git rust pkgconf \
+            gtk4 gtk4-layer-shell libpulse networkmanager
+
+      - name: Cache Cargo Registry
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+          key: arch-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: arch-cargo-
+
+      - name: Compile for Sway and FX-4320
+        run: |
+          cargo build \
+            --release \
+            --locked \
+            --no-default-features \
+            --features "ipc,cli,config+toml,clock,workspaces+sway,sys_info,volume,network_manager,notifications,tray,focused"
+
+      - name: Upload Native Binary
+        uses: actions/upload-artifact@v5
+        with:
+          name: ironbar-sway-fx4320
+          path: target/release/ironbar
+          retention-days: 7
