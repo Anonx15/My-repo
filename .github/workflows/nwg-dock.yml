@@ -16,7 +16,7 @@ jobs:
           pacman -S --noconfirm gcc base-devel go git gtk3 gtk-layer-shell
 
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           repository: nwg-piotr/nwg-dock
           path: nwg-dock
@@ -38,16 +38,20 @@ jobs:
           mkdir -p bin
           export CGO_ENABLED=1
           export CGO_CFLAGS="-O3 -march=x86-64-v2 -pipe -ffunction-sections -fdata-sections"
-          export CGO_LDFLAGS="-Wl,-O2 -Wl,--as-needed -Wl,--gc-sections -Wl,-z,relro -Wl,-z,now"
+          export CGO_LDFLAGS="-Wl,-O2 -Wl,--as-needed -Wl,--gc-sections -Wl,-z,relro -Wl,-z,now -Wno-deprecated-declarations"
           export GOAMD64=v2
           go build -v -trimpath -buildmode=pie -ldflags="-s -w -linkmode=external" -o bin/nwg-dock .
 
+      - name: Check binary type
+        working-directory: nwg-dock
+        run: file bin/nwg-dock
+      
       - name: Show binary size
         working-directory: nwg-dock
         run: ls -lh bin/nwg-dock
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: nwg-dock-${{ env.VERSION }}-x86-64-v2
           path: nwg-dock/bin/nwg-dock
