@@ -1,4 +1,4 @@
-name: Build ironbar — AMD FX-4320 (Sway)
+name: Build ironbar
 
 on:
   workflow_dispatch:
@@ -6,24 +6,26 @@ on:
 env:
   CARGO_TERM_COLOR: always
   RUSTFLAGS: "-C target-cpu=bdver2"
-  # تحسينات البروفايل يتم حقنها مباشرة هنا دون المساس بملفات المستودع
   CARGO_PROFILE_RELEASE_OPT_LEVEL: "3"
   CARGO_PROFILE_RELEASE_LTO: "fat"
   CARGO_PROFILE_RELEASE_CODEGEN_UNITS: "1"
   CARGO_PROFILE_RELEASE_PANIC: "abort"
   CARGO_PROFILE_RELEASE_STRIP: "true"
   CARGO_PROFILE_RELEASE_DEBUG: "false"
+
 jobs:
   build:
-    name: Minimal Compilation Environment
+    name: ironbar release build
     runs-on: ubuntu-latest
     container:
       image: archlinux:latest
 
     steps:
-      - name: Checkout Source
-        uses: actions/checkout@v4
+      # التصحيح هنا: سحب الكود المصدري لـ ironbar مباشرة من مستودعه الرسمي
+      - name: Checkout Ironbar Source Code
+        uses: actions/checkout@v5
         with:
+          repository: 'JakeStanger/ironbar'
           fetch-depth: 1
 
       - name: Install Absolute Bare Minimum Build Deps
@@ -43,7 +45,7 @@ jobs:
           key: arch-cargo-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: arch-cargo-
 
-      - name: Compile for Sway and FX-4320
+      - name: Build Hyper-Optimized Binary
         run: |
           cargo build \
             --release \
@@ -52,8 +54,8 @@ jobs:
             --features "ipc,cli,config+toml,clock,workspaces+sway,sys_info,volume,network_manager,notifications,tray,focused"
 
       - name: Upload Native Binary
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v4
         with:
           name: ironbar-sway-fx4320
           path: target/release/ironbar
-          retention-days: 7
+          retention-days: 15
