@@ -1,11 +1,19 @@
-name: Build ironbar
+name: Build ironbar — AMD FX-4320 (Sway)
 
 on:
   workflow_dispatch:
 
 env:
   CARGO_TERM_COLOR: always
-  RUSTFLAGS: "-C target-cpu=bdver2"
+  
+  # 1. إجبار Cargo على فصل بيئة التجميع (خادم GitHub) عن الهدف (جهازك)
+  CARGO_BUILD_TARGET: "x86_64-unknown-linux-gnu"
+  # 2. حقن تعليمات معالجك في التطبيق النهائي فقط
+  CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUSTFLAGS: "-C target-cpu=bdver2"
+  # 3. المفتاح السحري: منع تطبيق تعليمات معالجك على السكربتات التي تعمل داخل خادم GitHub لمنع الـ SIGILL
+  CARGO_TARGET_APPLIES_TO_HOST: "false"
+
+  # التحسينات الشاملة للتطبيق
   CARGO_PROFILE_RELEASE_OPT_LEVEL: "3"
   CARGO_PROFILE_RELEASE_LTO: "fat"
   CARGO_PROFILE_RELEASE_CODEGEN_UNITS: "1"
@@ -15,13 +23,12 @@ env:
 
 jobs:
   build:
-    name: ironbar release build
+    name: Optimized Sway Compilation
     runs-on: ubuntu-latest
     container:
       image: archlinux:latest
 
     steps:
-      # التصحيح هنا: سحب الكود المصدري لـ ironbar مباشرة من مستودعه الرسمي
       - name: Checkout Ironbar Source Code
         uses: actions/checkout@v5
         with:
@@ -54,8 +61,9 @@ jobs:
             --features "ipc,cli,config+toml,clock,workspaces+sway,sys_info,volume,network_manager,notifications,tray,focused"
 
       - name: Upload Native Binary
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
-          name: ironbar-sway-fx4320
-          path: target/release/ironbar
-          retention-days: 15
+          name: ironbar
+          # تنبيه: بما أننا حددنا الـ TARGET صراحة، مسار المخرجات في Cargo يتغير ليحتوي على اسم الـ Target
+          path: target/x86_64-unknown-linux-gnu/release/ironbar
+          retention-days: 7
