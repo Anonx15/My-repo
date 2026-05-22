@@ -1,69 +1,67 @@
-name: Build ironbar — AMD FX-4320 (Sway)
-
+name: Build ironbar
 on:
   workflow_dispatch:
 
-env:
-  CARGO_TERM_COLOR: always
-  
-  # 1. إجبار Cargo على فصل بيئة التجميع (خادم GitHub) عن الهدف (جهازك)
-  CARGO_BUILD_TARGET: "x86_64-unknown-linux-gnu"
-  # 2. حقن تعليمات معالجك في التطبيق النهائي فقط
-  CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUSTFLAGS: "-C target-cpu=bdver2"
-  # 3. المفتاح السحري: منع تطبيق تعليمات معالجك على السكربتات التي تعمل داخل خادم GitHub لمنع الـ SIGILL
-  CARGO_TARGET_APPLIES_TO_HOST: "false"
-
-  # التحسينات الشاملة للتطبيق
-  CARGO_PROFILE_RELEASE_OPT_LEVEL: "3"
-  CARGO_PROFILE_RELEASE_LTO: "fat"
-  CARGO_PROFILE_RELEASE_CODEGEN_UNITS: "1"
-  CARGO_PROFILE_RELEASE_PANIC: "abort"
-  CARGO_PROFILE_RELEASE_STRIP: "true"
-  CARGO_PROFILE_RELEASE_DEBUG: "false"
-
 jobs:
   build:
-    name: Optimized Sway Compilation
     runs-on: ubuntu-latest
     container:
       image: archlinux:latest
 
     steps:
-      - name: Checkout Ironbar Source Code
-        uses: actions/checkout@v5
-        with:
-          repository: 'JakeStanger/ironbar'
-          fetch-depth: 1
+    - name: Install System Toolchain & Unified LLVM Linker
+      run: |
+        pacman -Syu --noconfirm
+        pacman -S --noconfirm base-devel rust git gtk4 gtk4-layer-shell dconf clang lld
 
-      - name: Install Absolute Bare Minimum Build Deps
-        run: |
-          pacman -Syu --noconfirm
-          pacman -S --noconfirm --needed \
-            base-devel git rust pkgconf \
-            gtk4 gtk4-layer-shell libpulse networkmanager
+    - name: Resolve Latest Stable Tag & Shallow Clone (Optimized)
+      run: |
+        REMOTE_URL="https://github.com/JakeStanger/ironbar.git"
+        LATEST_STABLE=$(git ls-remote --tags --refs $REMOTE_URL | awk -F/ '{print $3}' | sort -V | tail -n 1)
+        echo "Found Latest Stable Tag: $LATEST_STABLE"
+        git clone --depth 1 --branch "$LATEST_STABLE" $REMOTE_URL .
 
-      - name: Cache Cargo Registry
-        uses: actions/cache@v5
-        with:
-          path: |
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-          key: arch-cargo-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: arch-cargo-
+    - name: Override Cargo Configuration with Pure Rust Optimizations
+      run: |
+        mkdir -p .cargo
+        cat << 'EOF' > .cargo/config.toml
+        [target.'cfg(target_arch = "x86_64")']
+        linker = "clang"
+        rustflags = [
+            "-C", "target-cpu=bdver2",
+            "-Clinker-plugin-lto",
+            "-Clink-arg=-fuse-ld=lld",
+            "-Clink-arg=-Wl,--gc-sections",
+            "-Clink-arg=-Wl,--as-needed",
+            "-Clink-arg=-Wl,-z,now",
+            "-Clink-arg=-Wl,-z,relro",
+            "-Clink-arg=-Wl,-z,pack-relative-relocs",
+            "-Clink-arg=-Wl,-O2"
+        ]
 
-      - name: Build Hyper-Optimized Binary
-        run: |
-          cargo build \
-            --release \
-            --locked \
-            --no-default-features \
-            --features "ipc,cli,config+toml,clock,workspaces+sway,sys_info,volume,network_manager,notifications,tray,focused"
+        [profile.release]
+        opt-level = 3
+        codegen-units = 1
+        panic = "abort"
+        strip = true
+        debug = false
+        EOF
 
-      - name: Upload Native Binary
-        uses: actions/upload-artifact@v5
-        with:
-          name: ironbar
-          # تنبيه: بما أننا حددنا الـ TARGET صراحة، مسار المخرجات في Cargo يتغير ليحتوي على اسم الـ Target
-          path: target/x86_64-unknown-linux-gnu/release/ironbar
-          retention-days: 7
+    - name: Compile Ultra-Lean Binary
+      run: |
+        cargo build --release --no-default-features --features "cli ipc clock label launcher script custom sys_info workspaces+sway"
+
+    - name: Inspect Binary Properties and Size
+      run: |
+        echo "=== تفاصيل وحجم الملف الثنائي الناتج ==="
+        ls -lh target/release/ironbar
+        echo "----------------------------------------"
+        du -b target/release/ironbar || du -s target/release/ironbar
+        echo "----------------------------------------"
+        file target/release/ironbar
+
+    - name: Export Optimized Binary
+      uses: actions/upload-artifact@v5
+      with:
+        name: ironbar-fx4320
+        path: target/release/ironbar
