@@ -1,4 +1,5 @@
-name: Build ironbar
+name: High-Efficiency Ironbar Production Build
+
 on:
   workflow_dispatch:
 
@@ -25,7 +26,7 @@ jobs:
       run: |
         mkdir -p .cargo
         cat << 'EOF' > .cargo/config.toml
-        [target.'cfg(target_arch = "x86_64")']
+        [target.x86_64-unknown-linux-gnu]
         linker = "clang"
         rustflags = [
             "-C", "target-cpu=bdver2",
@@ -49,19 +50,18 @@ jobs:
 
     - name: Compile Ultra-Lean Binary
       run: |
-        cargo build --release --no-default-features --features "cli ipc clock label launcher script custom sys_info workspaces+sway"
+        cargo build --release --target x86_64-unknown-linux-gnu --no-default-features --features "cli ipc clock label launcher script custom sys_info workspaces+sway"
 
     - name: Inspect Binary Properties and Size
       run: |
-        echo "=== تفاصيل وحجم الملف الثنائي الناتج ==="
-        ls -lh target/release/ironbar
+        ls -lh target/x86_64-unknown-linux-gnu/release/ironbar
         echo "----------------------------------------"
-        du -b target/release/ironbar || du -s target/release/ironbar
+        du -b target/x86_64-unknown-linux-gnu/release/ironbar || du -s target/x86_64-unknown-linux-gnu/release/ironbar
         echo "----------------------------------------"
-        file target/release/ironbar
+        file target/x86_64-unknown-linux-gnu/release/ironbar
 
     - name: Export Optimized Binary
       uses: actions/upload-artifact@v5
       with:
-        name: ironbar-fx4320
-        path: target/release/ironbar
+        name: ironbar-bdver2
+        path: target/x86_64-unknown-linux-gnu/release/ironbar
