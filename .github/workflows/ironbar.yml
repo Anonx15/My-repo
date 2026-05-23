@@ -1,4 +1,4 @@
-name: High-Efficiency Ironbar Production Build
+name: Build Ironbar 
 
 on:
   workflow_dispatch:
@@ -31,13 +31,16 @@ jobs:
         rustflags = [
             "-C", "target-cpu=bdver2",
             "-Clinker-plugin-lto",
-            "-Clink-arg=-fuse-ld=lld",
-            "-Clink-arg=-Wl,--gc-sections",
+            "-Clink-arg=-fuse-ld=lld",           
+            "-Clink-arg=-flto=full",              
+            "-Clink-arg=-Wl,--icf=safe",          
+            "-Clink-arg=-Wl,--gc-sections",       
             "-Clink-arg=-Wl,--as-needed",
             "-Clink-arg=-Wl,-z,now",
             "-Clink-arg=-Wl,-z,relro",
             "-Clink-arg=-Wl,-z,pack-relative-relocs",
-            "-Clink-arg=-Wl,-O2"
+            "-Clink-arg=-Wl,-O2"                  
+        ]
         ]
 
         [profile.release]
