@@ -41,7 +41,6 @@ jobs:
             "-Clink-arg=-Wl,-z,pack-relative-relocs",
             "-Clink-arg=-Wl,-O2"                  
         ]
-        ]
 
         [profile.release]
         opt-level = 3
