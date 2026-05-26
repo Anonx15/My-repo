@@ -30,7 +30,6 @@ jobs:
         linker = "clang"
         rustflags = [
             "-C", "target-cpu=bdver2",
-            "-C", "remap-path-prefix==",
             "-Clinker-plugin-lto",
             "-Clink-arg=-fuse-ld=lld",           
             "-Clink-arg=-flto=full",              
