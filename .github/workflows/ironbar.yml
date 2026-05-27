@@ -55,7 +55,7 @@ jobs:
 
     - name: Build binary
       run: |
-        cargo build --release --target x86_64-unknown-linux-gnu --no-default-features --features "cli ipc clock label launcher script custom sys_info workspaces+sway"
+        cargo build --release --target x86_64-unknown-linux-gnu --no-default-features --features "cli ipc clock label launcher script custom sys_info workspaces+sway config+json config+toml"
 
     - name: Inspect binary size
       run: |
