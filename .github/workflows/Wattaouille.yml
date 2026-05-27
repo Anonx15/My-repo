@@ -10,8 +10,10 @@ jobs:
       image: archlinux:latest
 
     steps:
-      - name: Checkout Code
-        uses: actions/checkout@v6
+      - name: Clone Wattaouille Repository
+        uses: actions/checkout@v5
+        with:
+          repository: 'wdes/wattaouille'
 
       - name: Install System Dependencies
         run: |
@@ -48,7 +50,7 @@ jobs:
           cargo build --release --locked
 
       - name: Upload Optimized Binary
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v5
         with:
           name: wattaouille-bdver2
           path: target/release/wattaouille
