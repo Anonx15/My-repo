@@ -2,7 +2,11 @@ name: Build Ghostty RPM
 
 on:
   workflow_dispatch:
-  
+
+env:
+  ZIG_VERSION: "0.15.2"
+  GHOSTTY_VERSION: "1.3.1"
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -10,21 +14,27 @@ jobs:
       image: fedora:44
 
     steps:
-      - name: Checkout workflow repo
+      - name: Checkout workflow repo (Spec file)
+        uses: actions/checkout@v4
+
+      - name: Checkout Ghostty source
         uses: actions/checkout@v4
         with:
-          path: myrepo
+          repository: ghostty-org/ghostty
+          ref: v${{ env.GHOSTTY_VERSION }}
+          path: ghostty
 
-      - name: Install dependencies
+      - name: Install build dependencies
         run: |
           dnf install -y \
-            git \
-            wget \
-            xz \
-            tar \
             rpm-build \
             rpmdevtools \
+            wget \
+            tar \
+            xz \
             scdoc \
+            gettext \
+            pkgconf-pkg-config \
             gtk4-devel \
             libadwaita-devel \
             gtk4-layer-shell-devel \
@@ -33,28 +43,19 @@ jobs:
             wayland-devel \
             wayland-protocols-devel \
             libxkbcommon-devel \
-            gettext \
-            blueprint-compiler \
-            libxml2-devel \
-            glib2-devel \
             pango-devel \
-            pkgconf-pkg-config
-
-      - name: Download Zig 0.15.2
-        run: |
-          wget -q https://ziglang.org/download/0.15.2/zig-x86_64-linux-0.15.2.tar.xz
-          tar -xf zig-x86_64-linux-0.15.2.tar.xz
-          echo "$PWD/zig-x86_64-linux-0.15.2" >> $GITHUB_PATH
-
-      - name: Checkout Ghostty
-        uses: actions/checkout@v4
-        with:
-          repository: ghostty-org/ghostty
-          ref: v1.3.1
-          path: ghostty
+            glib2-devel \
+            libxml2-devel \
+            blueprint-compiler
 
       - name: Setup rpmbuild tree
         run: rpmdev-setuptree
+
+      - name: Download and Setup Zig
+        run: |
+          wget -q "https://ziglang.org/download/${ZIG_VERSION}/zig-x86_64-linux-${ZIG_VERSION}.tar.xz"
+          tar -xf "zig-x86_64-linux-${ZIG_VERSION}.tar.xz"
+          echo "$PWD/zig-x86_64-linux-${ZIG_VERSION}" >> $GITHUB_PATH
 
       - name: Fetch Zig dependencies
         working-directory: ghostty
@@ -77,23 +78,24 @@ jobs:
             -fsys=gtk4-layer-shell \
             -p $PWD/output
 
-      - name: Show build output structure
+      - name: Verify build output
         run: find ghostty/output -type f | sort
 
       - name: Prepare RPM sources
         run: |
-          cp myrepo/ghostty.spec ~/rpmbuild/SPECS/ghostty.spec
+          cp ghostty.spec ~/rpmbuild/SPECS/ghostty.spec
+          
           cp -r ghostty/output ~/rpmbuild/SOURCES/output
 
-      - name: Build RPM
+      - name: Build RPM Package
         run: |
           rpmbuild -bb \
             --define "_sourcedir $HOME/rpmbuild/SOURCES" \
             ~/rpmbuild/SPECS/ghostty.spec
 
-      - name: Upload RPM
+      - name: Upload RPM Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ghostty-1.3.1-fc44.rpm
-          path: ~/rpmbuild/RPMS/x86_64/*.rpm
-          retention-days: 30
+          name: ghostty-${{ env.GHOSTTY_VERSION }}-fc44
+          path: /root/rpmbuild/RPMS/x86_64/*.rpm
+          retention-days: 7
