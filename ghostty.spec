@@ -5,57 +5,61 @@ Summary:        Fast, native, feature-rich terminal emulator
 License:        MIT
 URL:            https://ghostty.org
 
-Requires:       gtk4
-Requires:       libadwaita
-Requires:       gtk4-layer-shell
-Requires:       fontconfig
-Requires:       harfbuzz
-Requires:       libxkbcommon
-
-Conflicts:      ghostty
 
 %global __os_install_post %{nil}
 %global _missing_build_ids_terminate_build 0
 %global debug_package %{nil}
 
+
+Requires:       gtk4
+Requires:       libadwaita
+Requires:       libxkbcommon
+Requires:       hicolor-icon-theme
+
+
 %description
 Ghostty terminal emulator compiled with ReleaseFast for AMD FX-4320 (bdver2).
-Wayland-only build targeting Sway WM on Fedora 44.
+Wayland-only build targeting Sway WM on Fedora. 
+freetype, harfbuzz, and gtk4-layer-shell are statically linked.
+
 
 %install
-install -Dm755 %{_sourcedir}/output/bin/ghostty \
-               %{buildroot}/usr/bin/ghostty
 
-install -Dm644 %{_sourcedir}/output/share/applications/com.mitchellh.ghostty.desktop \
-               %{buildroot}/usr/share/applications/com.mitchellh.ghostty.desktop
+install -Dpm755 %{_sourcedir}/output/bin/ghostty \
+               %{buildroot}%{_bindir}/ghostty
 
-install -Dm644 %{_sourcedir}/output/share/terminfo/g/ghostty \
-               %{buildroot}/usr/share/terminfo/g/ghostty
+install -Dpm644 %{_sourcedir}/output/share/applications/com.mitchellh.ghostty.desktop \
+               %{buildroot}%{_datadir}/applications/com.mitchellh.ghostty.desktop
 
-cp -r %{_sourcedir}/output/share/icons \
-      %{buildroot}/usr/share/icons
+install -Dpm644 %{_sourcedir}/output/share/terminfo/g/ghostty \
+               %{buildroot}%{_datadir}/terminfo/g/ghostty
 
-cp -r %{_sourcedir}/output/share/ghostty \
-      %{buildroot}/usr/share/ghostty
+
+cp -r %{_sourcedir}/output/share/icons %{buildroot}%{_datadir}/
+cp -r %{_sourcedir}/output/share/ghostty %{buildroot}%{_datadir}/
 
 %files
-%attr(755, root, root) /usr/bin/ghostty
-/usr/share/applications/com.mitchellh.ghostty.desktop
-/usr/share/terminfo/g/ghostty
-/usr/share/icons/
-/usr/share/ghostty/
+%{_bindir}/ghostty
+%{_datadir}/applications/com.mitchellh.ghostty.desktop
+%{_datadir}/terminfo/g/ghostty
+
+%dir %{_datadir}/ghostty
+%{_datadir}/ghostty/*
+
+%{_datadir}/icons/hicolor/*/apps/*.png
+%{_datadir}/icons/hicolor/scalable/apps/*.svg
 
 %post
-tic -x /usr/share/terminfo/g/ghostty 2>/dev/null || true
-update-desktop-database /usr/share/applications 2>/dev/null || true
-gtk-update-icon-cache /usr/share/icons/hicolor 2>/dev/null || true
+
+update-desktop-database &>/dev/null || :
+gtk-update-icon-cache -f &>/dev/null || :
 
 %postun
-update-desktop-database /usr/share/applications 2>/dev/null || true
-gtk-update-icon-cache /usr/share/icons/hicolor 2>/dev/null || true
+
+update-desktop-database &>/dev/null || :
+gtk-update-icon-cache -f &>/dev/null || :
 
 %changelog
-* Thu May 15 2025 GitHub Actions <actions@github.com> - 1.3.1-1.bdver2
-- Compiled with ReleaseFast for AMD FX-4320 (bdver2)
-- Wayland-only
+* Thu Jun 20 2026 GitHub Actions <actions@github.com> - 1.3.1-2
+- Compiled with ReleaseFast for AMD FX-4320 (bdver2)- Wayland-only
 - freetype statically linked
