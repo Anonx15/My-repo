@@ -2,7 +2,7 @@ name: Build Ghostty RPM
 
 on:
   workflow_dispatch:
-  
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -18,28 +18,20 @@ jobs:
       - name: Install dependencies
         run: |
           dnf install -y \
-            git \
-            wget \
-            xz \
-            tar \
-            rpm-build \
-            rpmdevtools \
+            git wget xz tar \
+            rpm-build rpmdevtools \
             scdoc \
-            gtk4-devel \
-            libadwaita-devel \
+            gtk4-devel libadwaita-devel \
             gtk4-layer-shell-devel \
-            fontconfig-devel \
-            harfbuzz-devel \
-            wayland-devel \
-            wayland-protocols-devel \
+            fontconfig-devel harfbuzz-devel \
+            wayland-devel wayland-protocols-devel \
             libxkbcommon-devel \
-            gettext \
-            blueprint-compiler \
-            libxml2-devel \
-            glib2-devel \
-            pango-devel \
-            pkgconf-pkg-config
+            gettext blueprint-compiler \
+            libxml2-devel glib2-devel \
+            pango-devel pkgconf-pkg-config \
+            ncurses ncurses-devel
 
+      # ── Zig 0.15.2 ───
       - name: Download Zig 0.15.2
         run: |
           wget -q https://ziglang.org/download/0.15.2/zig-x86_64-linux-0.15.2.tar.xz
@@ -80,6 +72,7 @@ jobs:
       - name: Show build output structure
         run: find ghostty/output -type f | sort
 
+      
       - name: Prepare RPM sources
         run: |
           cp myrepo/ghostty.spec ~/rpmbuild/SPECS/ghostty.spec
