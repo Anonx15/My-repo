@@ -1,7 +1,3 @@
-# ---------------------------------------------------------------------------
-# Ghostty RPM spec -- bdver2 Wayland build for Fedora 44
-# ---------------------------------------------------------------------------
-#
 # Wraps the pre-built output tree produced by the build workflow.
 # The big change vs the previous spec: we install the terminfo entry
 # under BOTH g/ghostty AND x/xterm-ghostty so ncurses can resolve the
@@ -63,26 +59,23 @@ This package was compiled with ReleaseFast targeting AMD FX-4320
 (bdver2), Wayland-only, with freetype statically linked. Built for
 Sway WM on Fedora 44.
 
-# ---------------------------------------------------------------------------
 %install
-# ---------------------------------------------------------------------------
-
-# --- Binary ----------------------------------------------------------------
+# --- Binary ---------------------------------------------------------------
 install -Dm755 %{_sourcedir}/output/bin/ghostty \
                %{buildroot}%{_bindir}/ghostty
 
-# --- Desktop entry ---------------------------------------------------------
+# --- Desktop entry --------------------------------------------------------
 install -Dm644 %{_sourcedir}/output/share/applications/com.mitchellh.ghostty.desktop \
                %{buildroot}%{_datadir}/applications/com.mitchellh.ghostty.desktop
 
-# --- Terminfo --------------------------------------------------------------
+# --- Terminfo -------------------------------------------------------------
 # The zig build places the compiled terminfo at one of these depending on
 # the Ghostty version:
-#   output/share/terminfo/x/xterm-ghostty   (most builds)
-#   output/share/terminfo/g/ghostty         (some older / alt configs)
+#   output/share/terminfo/x/xterm-ghostty   (most builds, named xterm-ghostty)
+#   output/share/terminfo/g/ghostty        (some older / alt configs)
 # We need BOTH paths populated in the final RPM because:
-#   * Ghostty exports TERM=xterm-ghostty at runtime  →  x/xterm-ghostty
-#   * A few shells/tools probe for TERM=ghostty too  →  g/ghostty
+#   * Ghostty exports TERM=xterm-ghostty at runtime
+#   * A few shells/tools probe for TERM=ghostty too
 mkdir -p %{buildroot}%{_datadir}/terminfo/g
 mkdir -p %{buildroot}%{_datadir}/terminfo/x
 
@@ -104,136 +97,94 @@ if [ -z "$TI_SRC" ]; then
     exit 1
 fi
 
-# Ship the file at both locations. ncurses finds terminfo by path,
-# not by internal header name, so copying to both is sufficient.
-# The %post scriptlet below also has a self-heal step.
+# Ship the file at both locations. ncurses finds by path, not by internal
+# header name, so this is sufficient. The %post scriptlet below also has a
+# self-heal step that recompiles from source if anyone strips the file.
 install -Dm644 "$TI_SRC" %{buildroot}%{_datadir}/terminfo/g/ghostty
 install -Dm644 "$TI_SRC" %{buildroot}%{_datadir}/terminfo/x/xterm-ghostty
 
-# --- Icons -----------------------------------------------------------------
+# --- Icons ----------------------------------------------------------------
 # Install hicolor icons properly so GNOME's app grid picks them up.
+# `cp -a` does NOT create parent directories, so we must mkdir first.
 if [ -d %{_sourcedir}/output/share/icons/hicolor ]; then
+    install -d %{buildroot}%{_datadir}/icons
     cp -a %{_sourcedir}/output/share/icons/hicolor/. \
           %{buildroot}%{_datadir}/icons/hicolor/
 fi
 
-# --- Share data (config, themes, shell-integration, etc.) -----------------
+# --- Share data (config, lib, theme, etc.) --------------------------------
 if [ -d %{_sourcedir}/output/share/ghostty ]; then
-    mkdir -p %{buildroot}%{_datadir}/ghostty
+    install -d %{buildroot}%{_datadir}/ghostty
     cp -a %{_sourcedir}/output/share/ghostty/. \
           %{buildroot}%{_datadir}/ghostty/
 fi
 
-# --- Man page (optional — not all builds produce it) ----------------------
+# --- Man page (if produced) -----------------------------------------------
 if [ -f %{_sourcedir}/output/share/man/man1/ghostty.1 ]; then
     install -Dm644 %{_sourcedir}/output/share/man/man1/ghostty.1 \
                    %{buildroot}%{_mandir}/man1/ghostty.1
 fi
 
-# --- Locale / translations (optional) ------------------------------------
+# --- Locale / translations (if produced) ----------------------------------
 if [ -d %{_sourcedir}/output/share/locale ]; then
+    install -d %{buildroot}%{_datadir}/locale
     cp -a %{_sourcedir}/output/share/locale/. \
           %{buildroot}%{_datadir}/locale/
 fi
 
-# ---------------------------------------------------------------------------
 %files
-# ---------------------------------------------------------------------------
 %attr(755, root, root) %{_bindir}/ghostty
-
-# Desktop entry — required for GNOME app grid
 %{_datadir}/applications/com.mitchellh.ghostty.desktop
-
-# Terminfo — both entries are mandatory; RPM fails if either is missing
 %{_datadir}/terminfo/g/ghostty
 %{_datadir}/terminfo/x/xterm-ghostty
-
-# Icons
 %{_datadir}/icons/hicolor/*/apps/com.mitchellh.ghostty*
+%{_datadir}/ghostty/*
+%{_mandir}/man1/ghostty.1*
+%{_datadir}/locale/*/LC_MESSAGES/ghostty.mo
 
-# Ghostty resources (themes, shell-integration, etc.)
-%{_datadir}/ghostty/
-
-# Optional files: %ghost tells RPM to track them in the DB without
-# failing the build when the zig build didn't produce them.
-%ghost %{_mandir}/man1/ghostty.1*
-%ghost %{_datadir}/locale/*/LC_MESSAGES/ghostty.mo
-
-# ---------------------------------------------------------------------------
 %post
-# ---------------------------------------------------------------------------
-
-# Self-heal: if x/xterm-ghostty is missing (stripped by another package,
-# manual rm, etc.) recreate it from the g/ghostty entry.
-# Strategy:
-#   1. Decompile g/ghostty with infocmp -x (extended caps)
-#   2. Rename the first line from "ghostty" to "xterm-ghostty"
-#   3. Recompile with tic so the embedded header name matches the path
-#   4. Fallback: plain symlink if tic fails for any reason
-if [ ! -f %{_datadir}/terminfo/x/xterm-ghostty ] && \
-   [ -f %{_datadir}/terminfo/g/ghostty ]; then
-
-    TMP_TI=$(mktemp /tmp/ghostty.XXXXXX.terminfo)
-
-    # FIX vs previous spec:
-    # - Correct syntax: TERMINFO=<dir> infocmp -x <terminal-name>
-    # - NOT: infocmp -A ghostty  (-A takes a directory, not a name)
-    if TERMINFO=%{_datadir}/terminfo infocmp -x ghostty > "$TMP_TI" 2>/dev/null; then
-
-        # FIX vs previous spec:
-        # terminfo source first line looks like:
-        #   ghostty|Ghostty terminal emulator,
-        # We replace ONLY the leading name, not the separator:
-        #   WRONG: s/^ghostty[|,]/xterm-ghostty|,/  → doubles the separator
-        #   RIGHT: s/^ghostty/xterm-ghostty/         → clean substitution
-        sed -i '1s/^ghostty/xterm-ghostty/' "$TMP_TI"
-
-        # Compile into the system terminfo dir;
-        # fall back to symlink if tic fails
-        tic -x -o %{_datadir}/terminfo "$TMP_TI" 2>/dev/null || \
-            ln -sf ../g/ghostty %{_datadir}/terminfo/x/xterm-ghostty
-    else
-        # infocmp failed entirely — symlink is better than nothing
-        mkdir -p %{_datadir}/terminfo/x
-        ln -sf ../g/ghostty %{_datadir}/terminfo/x/xterm-ghostty
+# Self-heal: if xterm-ghostty terminfo is missing (stripped by another pkg,
+# manual rm, etc.) recreate it from the ghostty entry. We decompile with
+# infocmp, rename, and recompile with tic so the embedded header name
+# matches the path. Errors here are non-fatal.
+if [ ! -f %{_datadir}/terminfo/x/xterm-ghostty ] && [ -f %{_datadir}/terminfo/g/ghostty ]; then
+    TMP_TI=$(mktemp)
+    if TERMINFO=%{_datadir}/terminfo infocmp -A ghostty > "$TMP_TI" 2>/dev/null; then
+        # First line of terminfo source is "name|description,"
+        sed -i '1s/^ghostty[|,]/xterm-ghostty|,/' "$TMP_TI"
+        TERMINFO=%{_datadir}/terminfo tic -x "$TMP_TI" 2>/dev/null || true
     fi
-
     rm -f "$TMP_TI"
 fi
 
 # Refresh desktop / icon caches so Ghostty shows up in GNOME's app grid
+# (Settings > Applications, the GNOME Shell app picker, the dock, etc.)
 update-desktop-database %{_datadir}/applications 2>/dev/null || true
 if command -v gtk4-update-icon-cache >/dev/null 2>&1; then
     gtk4-update-icon-cache -f -t %{_datadir}/icons/hicolor 2>/dev/null || true
 else
-    gtk-update-icon-cache  -f -t %{_datadir}/icons/hicolor 2>/dev/null || true
+    gtk-update-icon-cache -f -t %{_datadir}/icons/hicolor 2>/dev/null || true
 fi
 
-# ---------------------------------------------------------------------------
 %postun
-# ---------------------------------------------------------------------------
 update-desktop-database %{_datadir}/applications 2>/dev/null || true
 if command -v gtk4-update-icon-cache >/dev/null 2>&1; then
     gtk4-update-icon-cache -f -t %{_datadir}/icons/hicolor 2>/dev/null || true
 else
-    gtk-update-icon-cache  -f -t %{_datadir}/icons/hicolor 2>/dev/null || true
+    gtk-update-icon-cache -f -t %{_datadir}/icons/hicolor 2>/dev/null || true
 fi
 
-# ---------------------------------------------------------------------------
 %changelog
-# ---------------------------------------------------------------------------
-* Thu Jun 2026 GitHub Actions <actions@github.com> - 1.3.1-5.bdver2
+* Mon Jun 22 2026 GitHub Actions <actions@github.com> - 1.3.1-1.bdver2
 - Compiled with ReleaseFast for AMD FX-4320 (bdver2)
-- Wayland-only, freetype statically linked
+- Wayland-only
+- freetype statically linked
 - Install terminfo under BOTH g/ghostty and x/xterm-ghostty so ncurses
   can resolve TERM=xterm-ghostty inside a running Ghostty session
 - Add Provides: terminfo(ghostty) and terminfo(xterm-ghostty)
-- FIX: infocmp self-heal used wrong -A flag; corrected to TERMINFO= + -x
-- FIX: sed regex doubled the terminfo separator; corrected to simple rename
-- FIX: optional man page and locale listed with %%ghost in %%files to
-  prevent rpmbuild failure when zig build does not produce them
-- Add %%global __strip %%{nil} to stop RPM re-stripping zig output
-- Refresh desktop + icon caches in %%post so entry appears in GNOME grid
+- Self-heal xterm-ghostty at install time via infocmp + tic if missing
+- Refresh desktop + icon caches in %post so the entry appears in GNOME
 - Drop erroneous "Conflicts: ghostty" self-conflict
 - Add BuildRequires/Requires for completeness
-- Use cp -a for icons/ghostty data to preserve permissions and timestamps
+- Install man page and locale files when present
+- Use install -Dm644 for icons with wildcards in %files for clean ownership
