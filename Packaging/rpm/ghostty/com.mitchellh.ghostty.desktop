@@ -1,0 +1,33 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Ghostty
+GenericName=Terminal Emulator
+Comment=Fast, native, feature-rich terminal emulator
+Keywords=terminal;shell;prompt;commandline;cmd;console;tty;pty;ghostty;
+Exec=ghostty
+TryExec=ghostty
+Icon=com.mitchellh.ghostty
+Categories=System;TerminalEmulator;GTK;GNOME;
+StartupNotify=true
+StartupWMClass=com.mitchellh.ghostty
+Terminal=false
+DBusActivatable=false
+X-GNOME-UsesNotifications=true
+Actions=new-window;new-tab;open-config;
+
+[Desktop Action new-window]
+Name=New Window
+Exec=ghostty
+Icon=com.mitchellh.ghostty
+
+[Desktop Action new-tab]
+Name=New Tab
+Exec=ghostty --gtk-single-instance=true
+Icon=com.mitchellh.ghostty
+
+[Desktop Action open-config]
+Name=Open Configuration
+Exec=sh -c 'mkdir -p "$HOME/.config/ghostty" && [ ! -f "$HOME/.config/ghostty/config" ] && touch "$HOME/.config/ghostty/config"; xdg-open "$HOME/.config/ghostty"'
+Icon=preferences-system
+OnlyShowIn=GNOME;
