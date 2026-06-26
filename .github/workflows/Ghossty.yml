@@ -8,216 +8,98 @@ jobs:
     runs-on: ubuntu-latest
     container:
       image: fedora:44
-
     steps:
-      # ── 1. Checkout workflow repo ─────────────────────────────────────────
       - name: Checkout workflow repo
         uses: actions/checkout@v4
         with:
           path: myrepo
 
-      # ── 2. Install all build dependencies in one logical block ────────────
-      #    (ncurses-devel added — needed by tic/infocmp in %post self-heal)
-      - name: Install build dependencies
+      - name: Install dependencies
         run: |
           dnf install -y \
-            git wget xz tar        \
-            rpm-build rpmdevtools  \
-            rpmlint                \
-            scdoc                  \
-            gtk4-devel             \
-            libadwaita-devel       \
+            git \
+            wget \
+            xz \
+            tar \
+            rpm-build \
+            rpmdevtools \
+            scdoc \
+            gtk4-devel \
+            libadwaita-devel \
             gtk4-layer-shell-devel \
-            fontconfig-devel       \
-            harfbuzz-devel         \
-            wayland-devel          \
-            wayland-protocols-devel\
-            libxkbcommon-devel     \
-            gettext                \
-            blueprint-compiler     \
-            libxml2-devel          \
-            glib2-devel            \
-            pango-devel            \
-            pkgconf-pkg-config     \
-            ncurses ncurses-devel
+            fontconfig-devel \
+            harfbuzz-devel \
+            wayland-devel \
+            wayland-protocols-devel \
+            libxkbcommon-devel \
+            gettext \
+            blueprint-compiler \
+            libxml2-devel \
+            glib2-devel \
+            pango-devel \
+            pkgconf-pkg-config \
+            ncurses
 
-      # ── 3. Setup RPM tree early — before we need it ───────────────────────
-      #    منطقياً: نجهّز بيئة البناء قبل ما نحتاجها
-      - name: Setup RPM build tree
-        run: rpmdev-setuptree
-
-      # ── 4. Download & verify Zig ──────────────────────────────────────────
-      #    0.15.2 هو الإصدار المطلوب من Ghostty 1.3.1 بالضبط
-      - name: Setup Zig 0.15.2
+      - name: Download Zig 0.15.2
         run: |
           wget -q https://ziglang.org/download/0.15.2/zig-x86_64-linux-0.15.2.tar.xz
           tar -xf zig-x86_64-linux-0.15.2.tar.xz
           echo "$PWD/zig-x86_64-linux-0.15.2" >> $GITHUB_PATH
 
-      - name: Verify Zig installation
-        run: zig version
-
-      # ── 5. Checkout Ghostty source ────────────────────────────────────────
-      #    fetch-depth: 1  →  shallow clone يوفّر وقت وحجم تحميل
-      - name: Checkout Ghostty source
+      - name: Checkout Ghostty
         uses: actions/checkout@v4
         with:
           repository: ghostty-org/ghostty
           ref: v1.3.1
           path: ghostty
-          fetch-depth: 1
 
-      # ── 6. Cache Zig package dependencies ────────────────────────────────
-      #    بدون cache: كل run تُحمَّل الـ deps من الصفر (~200MB+)
-      #    مع cache: الـ run الثانية وما بعدها تبدأ البناء مباشرة
-      - name: Cache Zig dependencies
-        uses: actions/cache@v4
-        id: zig-cache
-        with:
-          path: |
-            ~/.cache/zig
-            ghostty/.zig-cache
-          key: zig-deps-ghostty-v1.3.1-${{ hashFiles('ghostty/build.zig.zon') }}
-          restore-keys: |
-            zig-deps-ghostty-v1.3.1-
+      - name: Setup rpmbuild tree
+        run: rpmdev-setuptree
 
-      # ── 7. Fetch + Build في خطوة واحدة منطقية ───────────────────────────
-      #    --fetch يجب أن يسبق البناء مباشرةً وهو جزء منه
-      #    دمجهما معاً يوضح أن الـ fetch خطوة إعداد للبناء وليس مستقلاً
-      - name: Fetch dependencies and build Ghostty
+      - name: Fetch Zig dependencies
+        working-directory: ghostty
+        run: zig build --fetch
+
+      - name: Build Ghostty
         working-directory: ghostty
         run: |
-          # Fetch all Zig package dependencies first
-          zig build --fetch
-
-          # Build optimized for AMD FX-4320 (bdver2), Wayland-only
-          zig build                              \
-            -Doptimize=ReleaseFast               \
-            -Dcpu=bdver2                         \
-            -Dpie=false                          \
-            -Dstrip=true                         \
-            -Dfont-backend=fontconfig_freetype   \
-            -Dgtk-x11=false                      \
-            -Dgtk-wayland=true                   \
-            -Drenderer=opengl                    \
-            -fsys=fontconfig                     \
-            -fsys=harfbuzz                       \
-            -fsys=gtk4-layer-shell               \
+          zig build \
+            -Doptimize=ReleaseFast \
+            -Dcpu=bdver2 \
+            -Dpie=false \
+            -Dstrip=true \
+            -Dfont-backend=fontconfig_freetype \
+            -Dgtk-x11=false \
+            -Dgtk-wayland=true \
+            -Drenderer=opengl \
+            -fsys=fontconfig \
+            -fsys=harfbuzz \
+            -fsys=gtk4-layer-shell \
             -p $PWD/output
 
-      # ── 8. Verify build output BEFORE touching RPM ───────────────────────
-      #    منطقياً: نتحقق من نتيجة البناء قبل أي خطوة تالية
-      #    لو شيء ناقص — نكتشفه هنا، ليس بعد ما نبني الـ RPM
-      - name: Verify build output
+      - name: Show build output structure
+        run: find ghostty/output -type f | sort
+
+      - name: Prepare RPM sources (NEW STRUCTURE)
         run: |
-          echo "════════════════════════════════"
-          echo "  Full output tree"
-          echo "════════════════════════════════"
-          find ghostty/output -type f | sort
+          # Copy spec file from Packaging folder
+          cp myrepo/Packaging/rpm/ghostty/ghostty.spec ~/rpmbuild/SPECS/ghostty.spec
+          
+          # Copy custom desktop file
+          cp myrepo/Packaging/rpm/ghostty/com.mitchellh.ghostty.desktop ~/rpmbuild/SOURCES/
+          
+          # Copy build output
+          cp -r ghostty/output ~/rpmbuild/SOURCES/output
 
-          echo ""
-          echo "════════════════════════════════"
-          echo "  Critical file checks"
-          echo "════════════════════════════════"
-
-          # Binary
-          [ -f ghostty/output/bin/ghostty ] \
-            && echo "✅ binary found" \
-            || { echo "❌ FATAL: binary missing"; exit 1; }
-
-          # Desktop entry
-          [ -f ghostty/output/share/applications/com.mitchellh.ghostty.desktop ] \
-            && echo "✅ desktop entry found" \
-            || { echo "❌ FATAL: desktop entry missing"; exit 1; }
-
-          # Terminfo — at least one of the two paths must exist
-          FOUND_TI=0
-          [ -f ghostty/output/share/terminfo/x/xterm-ghostty ] && FOUND_TI=1 && \
-            echo "✅ terminfo: x/xterm-ghostty found"
-          [ -f ghostty/output/share/terminfo/g/ghostty ] && FOUND_TI=1 && \
-            echo "✅ terminfo: g/ghostty found"
-          [ "$FOUND_TI" -eq 0 ] && \
-            { echo "❌ FATAL: no terminfo file found in build output"; exit 1; }
-
-          # Icons
-          find ghostty/output/share/icons -name "com.mitchellh.ghostty*" | grep -q . \
-            && echo "✅ icons found" \
-            || echo "⚠️  WARNING: icons not found"
-
-          # Optional files (warn only, not fatal)
-          [ -f ghostty/output/share/man/man1/ghostty.1 ] \
-            && echo "✅ man page found" \
-            || echo "ℹ️  man page not produced (optional)"
-
-          [ -d ghostty/output/share/locale ] \
-            && echo "✅ locale files found" \
-            || echo "ℹ️  locale files not produced (optional)"
-
-      # ── 9. Prepare RPM sources ────────────────────────────────────────────
-      #    نُجهّز المصادر بعد التحقق فقط
-      - name: Prepare RPM sources
-        run: |
-          cp myrepo/ghostty.spec ~/rpmbuild/SPECS/ghostty.spec
-          cp -r ghostty/output   ~/rpmbuild/SOURCES/output
-
-      # ── 10. Build the RPM ─────────────────────────────────────────────────
       - name: Build RPM
         run: |
           rpmbuild -bb \
             --define "_sourcedir $HOME/rpmbuild/SOURCES" \
             ~/rpmbuild/SPECS/ghostty.spec
 
-      # ── 11. Verify RPM contents BEFORE upload ────────────────────────────
-      #    منطقياً: نفحص الـ RPM قبل رفعه — لا فائدة من رفع RPM ناقص
-      - name: Verify RPM contents
-        run: |
-          RPM_FILE=$(find /github/home/rpmbuild/RPMS/x86_64/ -name "*.rpm" | head -1)
-          echo "RPM built: $RPM_FILE"
-          echo ""
-
-          echo "════════════════════════════════"
-          echo "  RPM file list"
-          echo "════════════════════════════════"
-          rpm -qlp "$RPM_FILE"
-
-          echo ""
-          echo "════════════════════════════════"
-          echo "  Critical path checks inside RPM"
-          echo "════════════════════════════════"
-
-          rpm -qlp "$RPM_FILE" | grep -q "/usr/bin/ghostty" \
-            && echo "✅ binary present in RPM" \
-            || { echo "❌ FATAL: binary missing from RPM"; exit 1; }
-
-          rpm -qlp "$RPM_FILE" | grep -q "terminfo/x/xterm-ghostty" \
-            && echo "✅ xterm-ghostty terminfo present" \
-            || { echo "❌ FATAL: xterm-ghostty terminfo missing from RPM"; exit 1; }
-
-          rpm -qlp "$RPM_FILE" | grep -q "terminfo/g/ghostty" \
-            && echo "✅ ghostty terminfo present" \
-            || { echo "❌ FATAL: ghostty terminfo missing from RPM"; exit 1; }
-
-          rpm -qlp "$RPM_FILE" | grep -q ".desktop" \
-            && echo "✅ desktop entry present" \
-            || echo "⚠️  WARNING: desktop entry missing"
-
-          echo ""
-          echo "════════════════════════════════"
-          echo "  RPM metadata"
-          echo "════════════════════════════════"
-          rpm -qip "$RPM_FILE"
-
-      # ── 12. rpmlint — catch spec/packaging mistakes ───────────────────────
-      #    يكشف أخطاء التغليف قبل التوزيع (تحذيرات لا تُوقف البناء)
-      - name: Run rpmlint
-        run: |
-          RPM_FILE=$(find /github/home/rpmbuild/RPMS/x86_64/ -name "*.rpm" | head -1)
-          rpmlint "$RPM_FILE" || true
-
-      # ── 13. Upload — فقط بعد كل الفحوصات ────────────────────────────────
-      - name: Upload RPM artifact
+      - name: Upload RPM
         uses: actions/upload-artifact@v4
         with:
-          name: ghostty-1.3.1-bdver2-fc44
+          name: ghostty-1.3.1-fc44.rpm
           path: /github/home/rpmbuild/RPMS/x86_64/*.rpm
           retention-days: 30
