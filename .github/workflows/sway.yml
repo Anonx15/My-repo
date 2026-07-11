@@ -1,21 +1,53 @@
-name: Build Sway + wlroots RPMs
+name: Build Sway + wlroots RPMs (AMD FX-4320 / Clang)
 
 on:
   workflow_dispatch:
-
+  
 # sway 1.12 requires wlroots >=0.20.0 <0.21.0
 env:
   WLROOTS_VERSION: "0.20.0"
   SWAY_VERSION: "1.12"
+
+  # Compiler selection — only what meson actually reads for C projects
   CC: clang
   CC_LD: lld
+
+  # === CFLAGS for AMD FX-4320 (Piledriver / bdver2) ===
+  #
+  # -march=bdver2            : target Piledriver microarchitecture
+  # -mprefer-vector-width=128: auto-vectorizer uses 128-bit (Piledriver ALUs are
+  #                            128-bit; 256-bit ops split into 2 uops + store bug)
+  # -mvzeroupper             : insert VZEROUPPER to avoid AVX→SSE transition penalty
+  # -O2                      : balanced optimization (O3 bloats code, hurts 16KB L1)
+  # -pipe                    : use pipes not temp files between compiler stages
+  # -fstack-protector-strong : canary on functions with buffers (~1% cost)
+  # -D_FORTIFY_SOURCE=3      : compile+runtime bounds checking on libc functions
+  #                            (level 3 is safe with Clang 22 + glibc 2.43)
+  # -fomit-frame-pointer     : free up RBP as general register (bdver2 has only
+  #                            16 GPRs; RBP = ~6% of them; measurable on register-
+  #                            starved Piledriver). Overrides Fedora's default
+  #                            -fno-omit-frame-pointer which is for profiling.
+  #
   CFLAGS: >-
     -march=bdver2
     -mprefer-vector-width=128
     -mvzeroupper
     -O2 -pipe
     -fstack-protector-strong
-    -D_FORTIFY_SOURCE=2
+    -D_FORTIFY_SOURCE=3
+    -fomit-frame-pointer
+
+  # === LDFLAGS ===
+  #
+  # -fuse-ld=lld       : LLVM linker (best LTO integration with Clang)
+  # -Wl,--as-needed    : skip unused DT_NEEDED (faster startup, less RAM)
+  # -Wl,-z,relro       : GOT read-only after relocation (free security)
+  # -Wl,-z,now         : eager symbol resolution (free security, sway starts once)
+  # -Wl,-O1            : linker layout optimization
+  #
+  # NOTE: Fedora's %meson macro already injects relro/now/as-needed.
+  # Duplicates are harmless — the linker deduplicates them.
+  #
   LDFLAGS: >-
     -fuse-ld=lld
     -Wl,--as-needed
@@ -59,13 +91,13 @@ jobs:
             "https://github.com/swaywm/sway/archive/${SWAY_VERSION}/sway-${SWAY_VERSION}.tar.gz"
 
       - name: Build wlroots RPM
-        run: rpmbuild -ba $GITHUB_WORKSPACE/Packaging/rpm/wlroots/wlroots.spec --define "_topdir $HOME/rpmbuild"
+        run: rpmbuild -ba $GITHUB_WORKSPACE/packaging/wlroots/wlroots.spec --define "_topdir $HOME/rpmbuild"
 
       - name: Install wlroots RPMs
         run: dnf install -y ~/rpmbuild/RPMS/x86_64/wlroots-*.rpm
 
       - name: Build sway RPM
-        run: rpmbuild -ba $GITHUB_WORKSPACE/Packaging/rpm/sway/sway.spec --define "_topdir $HOME/rpmbuild"
+        run: rpmbuild -ba $GITHUB_WORKSPACE/packaging/sway/sway.spec --define "_topdir $HOME/rpmbuild"
 
       - name: Upload RPMs
         uses: actions/upload-artifact@v4
