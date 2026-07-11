@@ -1,6 +1,5 @@
-# RPM spec for sway 1.12
-# Build profile: -Dswaybar=false -Dtray=disabled (no swaybar, no tray)
-# Linked against wlroots 0.20.0 built without Xwayland and without Vulkan.
+# sway 1.12 — no swaybar, no tray, no gdk-pixbuf
+# Linked against wlroots 0.20.0 (no Xwayland, no Vulkan)
 
 Name:           sway
 Version:        1.12
@@ -33,36 +32,30 @@ BuildRequires:  pkgconfig(libdrm)
 BuildRequires:  pkgconfig(libudev)
 BuildRequires:  pkgconfig(libsystemd) >= 239
 
-# Runtime: wlroots shared library
+# Runtime
 Requires:       wlroots%{?_isa} >= 0.20.0
-
-# Runtime: GPU drivers (sway cannot start without EGL + GBM + DRI)
 Requires:       mesa-dri-drivers%{?_isa}
 Requires:       mesa-libEGL%{?_isa}
 Requires:       mesa-libgbm%{?_isa}
 Requires:       mesa-libGL%{?_isa}
-
-# Recommended: useful but sway runs without them
 Recommends:     swaybg
 Recommends:     mesa-va-drivers
 Recommends:     libva
 Recommends:     mesa-vulkan-drivers
 
 %description
-Sway is a tiling Wayland compositor and a drop-in replacement for the
-i3 window manager. It works with your existing i3 configuration and
-supports most of i3's features, plus a few extras.
-
-This build is configured without swaybar and without the system tray.
+Sway is a tiling Wayland compositor and drop-in replacement for i3.
+This build has swaybar and tray disabled.
 
 %prep
 %autosetup -n sway-%{version}
 
 %build
+export CFLAGS="${CFLAGS} -flto=full"
+export LDFLAGS="${LDFLAGS} -flto=full"
+
 %meson \
     -Dwerror=false \
-    -Db_lto=true \
-    -Db_lto_mode=full \
     -Dswaybar=false \
     -Dswaynag=true \
     -Dtray=disabled \
@@ -104,7 +97,6 @@ This build is configured without swaybar and without the system tray.
 %{_datadir}/zsh/site-functions/_swaynag
 
 %changelog
-* Fri Jul 11 2026 Builder <builder@localhost> - 1.12-1
-- Initial package for sway 1.12
-- Built without swaybar and without system tray
-- Linked against wlroots 0.20.0 (no Xwayland, no Vulkan)
+* Sat Jul 12 2026 Builder <builder@localhost> - 1.12-1
+- sway 1.12 without swaybar/tray
+- Built with Clang+LLD full LTO for AMD FX-4320
