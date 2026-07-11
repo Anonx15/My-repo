@@ -1,0 +1,82 @@
+name: Build Sway + wlroots RPMs (AMD FX-4320 / Clang)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/sway.yml'
+      - 'packaging/rpm/*.spec'
+
+# sway 1.12 requires wlroots >=0.20.0 <0.21.0
+env:
+  WLROOTS_VERSION: "0.20.0"
+  SWAY_VERSION: "1.12"
+  CC: clang
+  CC_LD: lld
+  CFLAGS: >-
+    -march=bdver2
+    -mprefer-avx128
+    -mvzeroupper
+    -O2 -pipe
+    -fstack-protector-strong
+    -D_FORTIFY_SOURCE=2
+  LDFLAGS: >-
+    -fuse-ld=lld
+    -Wl,--as-needed
+    -Wl,-z,relro -Wl,-z,now
+    -Wl,-O1
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container:
+      image: fedora:44
+
+    steps:
+      - name: Install dependencies
+        run: |
+          dnf install -y --setopt=install_weak_deps=False \
+            @development-tools \
+            meson ninja-build rpm-build rpmdevtools \
+            clang lld llvm \
+            wayland-devel wayland-protocols-devel \
+            libinput-devel libxkbcommon-devel \
+            pixman-devel libdrm-devel mesa-libgbm-devel \
+            mesa-libEGL-devel mesa-libGLES-devel libglvnd-devel \
+            libseat-devel \
+            libdisplay-info-devel libliftoff-devel \
+            hwdata-devel \
+            json-c-devel pcre2-devel \
+            cairo-devel pango-devel \
+            libevdev-devel systemd-devel \
+            scdoc
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download source tarballs
+        run: |
+          rpmdev-setuptree
+          curl --fail -L -o ~/rpmbuild/SOURCES/wlroots-${WLROOTS_VERSION}.tar.gz \
+            "https://gitlab.freedesktop.org/wlroots/wlroots/-/archive/${WLROOTS_VERSION}/wlroots-${WLROOTS_VERSION}.tar.gz"
+          curl --fail -L -o ~/rpmbuild/SOURCES/sway-${SWAY_VERSION}.tar.gz \
+            "https://github.com/swaywm/sway/archive/${SWAY_VERSION}/sway-${SWAY_VERSION}.tar.gz"
+
+      - name: Build wlroots RPM
+        run: rpmbuild -ba packaging/rpm/wlroots.spec --define "_topdir $HOME/rpmbuild"
+
+      - name: Install wlroots RPMs
+        run: dnf install -y ~/rpmbuild/RPMS/x86_64/wlroots-*.rpm
+
+      - name: Build sway RPM
+        run: rpmbuild -ba packaging/rpm/sway.spec --define "_topdir $HOME/rpmbuild"
+
+      - name: Upload RPMs
+        uses: actions/upload-artifact@v4
+        with:
+          name: rpms-sway-${{ env.SWAY_VERSION }}-wlroots-${{ env.WLROOTS_VERSION }}-bdver2
+          path: |
+            /root/rpmbuild/RPMS/x86_64/*.rpm
+            /root/rpmbuild/SRPMS/*.rpm
+          retention-days: 30
