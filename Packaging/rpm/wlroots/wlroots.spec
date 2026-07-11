@@ -1,5 +1,5 @@
-# RPM spec for wlroots 0.20.0
-# Build profile: -Dxwayland=disabled -Dbackends=drm,libinput -Drenderers=gles2
+# wlroots 0.20.0 — DRM+libinput backends, GLES2 renderer only
+# No Xwayland, no X11 backend, no Vulkan renderer
 
 %global wlroots_soname 0.20
 
@@ -32,33 +32,31 @@ BuildRequires:  pkgconfig(egl)
 BuildRequires:  pkgconfig(glesv2)
 BuildRequires:  hwdata-devel
 
-# Runtime Requires are auto-detected by RPM from the linked .so files.
-# No explicit Requires needed.
-
 %description
 A modular Wayland compositor library used by sway and other
-wlroots-based compositors.
-
-This build provides the DRM and libinput backends with the GLES2
-renderer. Xwayland, the X11 backend, and the Vulkan renderer are
-disabled.
+wlroots-based compositors. This build provides DRM and libinput
+backends with the GLES2 renderer.
 
 %package        devel
 Summary:        Development files for wlroots
 Requires:       %{name}%{?_isa} = %{version}-%{release}
 
 %description    devel
-Headers and pkg-config file needed to build compositors
-against libwlroots.
+Headers and pkg-config file for building against libwlroots.
 
 %prep
 %autosetup -n wlroots-%{version}
 
 %build
+# LTO: pass -flto=full directly because Fedora's %meson does not support
+# -Db_lto_mode reliably across all meson versions.  -flto=full gives
+# monolithic LTO (maximum cross-module optimization).  With Clang+LLD
+# this is well-supported and produces the best code quality.
+export CFLAGS="${CFLAGS} -flto=full"
+export LDFLAGS="${LDFLAGS} -flto=full"
+
 %meson \
     -Dwerror=false \
-    -Db_lto=true \
-    -Db_lto_mode=full \
     -Dexamples=false \
     -Dxwayland=disabled \
     -Drenderers=gles2 \
@@ -79,7 +77,6 @@ against libwlroots.
 %{_libdir}/pkgconfig/wlroots-%{wlroots_soname}.pc
 
 %changelog
-* Fri Jul 11 2026 Builder <builder@localhost> - 0.20.0-1
-- Initial package for wlroots 0.20.0
-- DRM + libinput backends, GLES2 renderer only
-- Xwayland, X11 backend, and Vulkan renderer disabled
+* Sat Jul 12 2026 Builder <builder@localhost> - 0.20.0-1
+- wlroots 0.20.0 with DRM+libinput, GLES2 renderer
+- Built with Clang+LLD full LTO for AMD FX-4320
