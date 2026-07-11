@@ -59,13 +59,13 @@ jobs:
             "https://github.com/swaywm/sway/archive/${SWAY_VERSION}/sway-${SWAY_VERSION}.tar.gz"
 
       - name: Build wlroots RPM
-        run: rpmbuild -ba $GITHUB_WORKSPACE/packaging/rpm/wlroots.spec --define "_topdir $HOME/rpmbuild"
+        run: rpmbuild -ba $GITHUB_WORKSPACE/Packaging/rpm/wlroots/wlroots.spec --define "_topdir $HOME/rpmbuild"
 
       - name: Install wlroots RPMs
         run: dnf install -y ~/rpmbuild/RPMS/x86_64/wlroots-*.rpm
 
       - name: Build sway RPM
-        run: rpmbuild -ba $GITHUB_WORKSPACE/packaging/rpm/sway.spec --define "_topdir $HOME/rpmbuild"
+        run: rpmbuild -ba $GITHUB_WORKSPACE/packaging/rpm/sway/sway.spec --define "_topdir $HOME/rpmbuild"
 
       - name: Upload RPMs
         uses: actions/upload-artifact@v4
