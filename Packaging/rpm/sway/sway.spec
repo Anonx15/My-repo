@@ -92,6 +92,7 @@ This build has swaybar and tray disabled.
 %{_mandir}/man5/sway-output.5*
 %{_mandir}/man5/swaynag.5*
 %{_mandir}/man7/sway-ipc.7*
+%{_mandir}/man7/swaybar-protocol.7*
 %{_datadir}/bash-completion/completions/sway
 %{_datadir}/bash-completion/completions/swaymsg
 %{_datadir}/zsh/site-functions/_sway
