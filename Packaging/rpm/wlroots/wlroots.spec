@@ -48,10 +48,6 @@ Headers and pkg-config file for building against libwlroots.
 %autosetup -n wlroots-%{version}
 
 %build
-# LTO: pass -flto=full directly because Fedora's %meson does not support
-# -Db_lto_mode reliably across all meson versions.  -flto=full gives
-# monolithic LTO (maximum cross-module optimization).  With Clang+LLD
-# this is well-supported and produces the best code quality.
 export CFLAGS="${CFLAGS} -flto=full"
 export LDFLAGS="${LDFLAGS} -flto=full"
 
