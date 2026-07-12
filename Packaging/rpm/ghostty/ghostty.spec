@@ -37,12 +37,13 @@ install -Dm755 %{_sourcedir}/output/bin/ghostty \
 install -Dm644 %{_sourcedir}/com.mitchellh.ghostty.desktop \
                %{buildroot}%{_datadir}/applications/com.mitchellh.ghostty.desktop
 
-# Terminfo
+# Terminfo — both entries are listed in %files, so a missing source is a
+# real build error and must fail loudly rather than being swallowed.
 install -Dm644 %{_sourcedir}/output/share/terminfo/x/xterm-ghostty \
-               %{buildroot}%{_datadir}/terminfo/x/xterm-ghostty 2>/dev/null || true
+               %{buildroot}%{_datadir}/terminfo/x/xterm-ghostty
 
 install -Dm644 %{_sourcedir}/output/share/terminfo/g/ghostty \
-               %{buildroot}%{_datadir}/terminfo/g/ghostty 2>/dev/null || true
+               %{buildroot}%{_datadir}/terminfo/g/ghostty
 
 # Icons and resources
 cp -r %{_sourcedir}/output/share/icons \

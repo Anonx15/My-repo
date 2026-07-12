@@ -91,13 +91,32 @@ jobs:
             "https://github.com/swaywm/sway/archive/${SWAY_VERSION}/sway-${SWAY_VERSION}.tar.gz"
 
       - name: Build wlroots RPM
-        run: rpmbuild -ba $(find . -name wlroots.spec) --define "_topdir $HOME/rpmbuild"
+        run: |
+          spec="$(find . -name wlroots.spec -print -quit)"
+          if [ -z "$spec" ]; then
+            echo "::error::wlroots.spec not found in repository" >&2
+            exit 1
+          fi
+          rpmbuild -ba "$spec" --define "_topdir $HOME/rpmbuild"
 
       - name: Install wlroots RPMs
-        run: dnf install -y ~/rpmbuild/RPMS/x86_64/wlroots-*.rpm
+        run: |
+          shopt -s nullglob
+          rpms=(~/rpmbuild/RPMS/x86_64/wlroots-*.rpm)
+          if [ ${#rpms[@]} -eq 0 ]; then
+            echo "::error::No wlroots RPMs were produced by the build" >&2
+            exit 1
+          fi
+          dnf install -y "${rpms[@]}"
 
       - name: Build sway RPM
-        run: rpmbuild -ba $(find . -name sway.spec) --define "_topdir $HOME/rpmbuild"
+        run: |
+          spec="$(find . -name sway.spec -print -quit)"
+          if [ -z "$spec" ]; then
+            echo "::error::sway.spec not found in repository" >&2
+            exit 1
+          fi
+          rpmbuild -ba "$spec" --define "_topdir $HOME/rpmbuild"
 
       - name: Upload RPMs
         uses: actions/upload-artifact@v4
