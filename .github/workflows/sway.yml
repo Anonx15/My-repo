@@ -2,11 +2,20 @@ name: Build Sway + wlroots RPMs
 
 on:
   workflow_dispatch:
-  
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-sway-rpms
+  cancel-in-progress: true
+
 # sway 1.12 requires wlroots >=0.20.0 <0.21.0
 env:
   WLROOTS_VERSION: "0.20.0"
+  WLROOTS_SHA256: 33f52414e1b280839aeb70786f0ae2c9f54e27ad4873108d86270a2f89c4934b
   SWAY_VERSION: "1.12"
+  SWAY_SHA256: a7b1becc217433c11c6284d36bcea0687b87b77b0ed26a384565292ec321f2b1
 
   # Compiler selection — only what meson actually reads for C projects
   CC: clang
@@ -56,9 +65,11 @@ env:
 
 jobs:
   build:
+    name: Build Sway and wlroots RPMs
     runs-on: ubuntu-latest
+    timeout-minutes: 120
     container:
-      image: fedora:44
+      image: fedora@sha256:6c75d5bf57cb0fa5aa4b92c6a83c86c791644496d9ac230de7711f5b8ec3b898 # Fedora 44
 
     steps:
       - name: Install dependencies
@@ -80,24 +91,26 @@ jobs:
             scdoc
 
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
 
       - name: Download source tarballs
         run: |
           rpmdev-setuptree
-          curl --fail -L -o ~/rpmbuild/SOURCES/wlroots-${WLROOTS_VERSION}.tar.gz \
-            "https://gitlab.freedesktop.org/wlroots/wlroots/-/archive/${WLROOTS_VERSION}/wlroots-${WLROOTS_VERSION}.tar.gz"
-          curl --fail -L -o ~/rpmbuild/SOURCES/sway-${SWAY_VERSION}.tar.gz \
-            "https://github.com/swaywm/sway/archive/${SWAY_VERSION}/sway-${SWAY_VERSION}.tar.gz"
+          wlroots_archive="$HOME/rpmbuild/SOURCES/wlroots-${WLROOTS_VERSION}.tar.gz"
+          sway_archive="$HOME/rpmbuild/SOURCES/sway-${SWAY_VERSION}.tar.gz"
+          curl --proto '=https' --tlsv1.2 --fail --location \
+            --output "${wlroots_archive}" \
+            "https://gitlab.freedesktop.org/wlroots/wlroots/-/releases/${WLROOTS_VERSION}/downloads/wlroots-${WLROOTS_VERSION}.tar.gz"
+          curl --proto '=https' --tlsv1.2 --fail --location \
+            --output "${sway_archive}" \
+            "https://github.com/swaywm/sway/releases/download/${SWAY_VERSION}/sway-${SWAY_VERSION}.tar.gz"
+          echo "${WLROOTS_SHA256}  ${wlroots_archive}" | sha256sum --check --strict
+          echo "${SWAY_SHA256}  ${sway_archive}" | sha256sum --check --strict
 
       - name: Build wlroots RPM
-        run: |
-          spec="$(find . -name wlroots.spec -print -quit)"
-          if [ -z "$spec" ]; then
-            echo "::error::wlroots.spec not found in repository" >&2
-            exit 1
-          fi
-          rpmbuild -ba "$spec" --define "_topdir $HOME/rpmbuild"
+        run: rpmbuild -ba Packaging/rpm/wlroots/wlroots.spec --define "_topdir $HOME/rpmbuild"
 
       - name: Install wlroots RPMs
         run: |
@@ -119,7 +132,7 @@ jobs:
           rpmbuild -ba "$spec" --define "_topdir $HOME/rpmbuild"
 
       - name: Upload RPMs
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: rpms-sway-${{ env.SWAY_VERSION }}-wlroots-${{ env.WLROOTS_VERSION }}-bdver2
           path: |
