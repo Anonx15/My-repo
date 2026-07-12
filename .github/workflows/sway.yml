@@ -113,10 +113,23 @@ jobs:
         run: rpmbuild -ba Packaging/rpm/wlroots/wlroots.spec --define "_topdir $HOME/rpmbuild"
 
       - name: Install wlroots RPMs
-        run: dnf install -y ~/rpmbuild/RPMS/x86_64/wlroots-*.rpm
+        run: |
+          shopt -s nullglob
+          rpms=(~/rpmbuild/RPMS/x86_64/wlroots-*.rpm)
+          if [ ${#rpms[@]} -eq 0 ]; then
+            echo "::error::No wlroots RPMs were produced by the build" >&2
+            exit 1
+          fi
+          dnf install -y "${rpms[@]}"
 
       - name: Build sway RPM
-        run: rpmbuild -ba Packaging/rpm/sway/sway.spec --define "_topdir $HOME/rpmbuild"
+        run: |
+          spec="$(find . -name sway.spec -print -quit)"
+          if [ -z "$spec" ]; then
+            echo "::error::sway.spec not found in repository" >&2
+            exit 1
+          fi
+          rpmbuild -ba "$spec" --define "_topdir $HOME/rpmbuild"
 
       - name: Upload RPMs
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
