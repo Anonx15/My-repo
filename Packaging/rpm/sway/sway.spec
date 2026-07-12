@@ -1,13 +1,15 @@
 # sway 1.12 — no swaybar, no tray, no gdk-pixbuf
 # Linked against wlroots 0.20.0 (no Xwayland, no Vulkan)
 
+%global toolchain clang
+
 Name:           sway
 Version:        1.12
 Release:        1%{?dist}
 Summary:        i3-compatible tiling Wayland compositor
 License:        MIT
 URL:            https://github.com/swaywm/sway
-Source0:        %{url}/archive/%{version}/sway-%{version}.tar.gz
+Source0:        %{url}/releases/download/%{version}/sway-%{version}.tar.gz
 
 BuildRequires:  meson >= 1.3
 BuildRequires:  ninja-build
@@ -32,7 +34,6 @@ BuildRequires:  pkgconfig(libdrm)
 BuildRequires:  pkgconfig(libudev)
 BuildRequires:  pkgconfig(libsystemd) >= 239
 
-# Runtime
 Requires:       wlroots%{?_isa} >= 0.20.0
 Requires:       mesa-dri-drivers%{?_isa}
 Requires:       mesa-libEGL%{?_isa}
@@ -48,11 +49,12 @@ Sway is a tiling Wayland compositor and drop-in replacement for i3.
 This build has swaybar and tray disabled.
 
 %prep
+# Release tarballs extract to sway-%{version}/
 %autosetup -n sway-%{version}
 
 %build
-export CFLAGS="${CFLAGS} -flto=full"
-export LDFLAGS="${LDFLAGS} -flto=full"
+export CFLAGS="%{build_cflags} -march=bdver2 -mprefer-vector-width=128 -mvzeroupper -fomit-frame-pointer -flto=full"
+export LDFLAGS="%{build_ldflags} -flto=full -fuse-ld=lld -Wl,-O1"
 
 %meson \
     -Dwerror=false \
