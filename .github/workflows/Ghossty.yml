@@ -14,31 +14,16 @@ jobs:
         with:
           path: myrepo
 
-      - name: Install dependencies
-        run: |
-          dnf install -y \
-            git \
-            wget \
-            xz \
-            tar \
-            rpm-build \
-            rpmdevtools \
-            scdoc \
-            gtk4-devel \
-            libadwaita-devel \
-            gtk4-layer-shell-devel \
-            fontconfig-devel \
-            harfbuzz-devel \
-            wayland-devel \
-            wayland-protocols-devel \
-            libxkbcommon-devel \
-            gettext \
-            blueprint-compiler \
-            libxml2-devel \
-            glib2-devel \
-            pango-devel \
-            pkgconf-pkg-config \
-            ncurses
+      - name: Set up Fedora RPM build environment
+        uses: ./myrepo/.github/actions/setup-fedora-rpmbuild
+        with:
+          packages: >-
+            git wget xz tar
+            gtk4-devel libadwaita-devel gtk4-layer-shell-devel
+            fontconfig-devel harfbuzz-devel
+            gettext blueprint-compiler
+            libxml2-devel glib2-devel
+            pkgconf-pkg-config ncurses
 
       - name: Download Zig 0.15.2
         run: |
@@ -52,9 +37,6 @@ jobs:
           repository: ghostty-org/ghostty
           ref: v1.3.1
           path: ghostty
-
-      - name: Setup rpmbuild tree
-        run: rpmdev-setuptree
 
       - name: Fetch Zig dependencies
         working-directory: ghostty

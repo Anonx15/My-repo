@@ -12,9 +12,7 @@ URL:            https://gitlab.freedesktop.org/wlroots/wlroots
 Source0:        %{url}/-/archive/%{version}/wlroots-%{version}.tar.gz
 
 BuildRequires:  meson >= 0.59
-BuildRequires:  ninja-build
-BuildRequires:  clang
-BuildRequires:  lld
+%include Packaging/rpm/common/toolchain-buildrequires.inc
 BuildRequires:  wayland-devel
 BuildRequires:  pkgconfig(wayland-server) >= 1.22
 BuildRequires:  pkgconfig(wayland-client)
@@ -48,8 +46,7 @@ Headers and pkg-config file for building against libwlroots.
 %autosetup -n wlroots-%{version}
 
 %build
-export CFLAGS="${CFLAGS} -flto=full"
-export LDFLAGS="${LDFLAGS} -flto=full"
+%include Packaging/rpm/common/lto-build-flags.inc
 
 %meson \
     -Dwerror=false \

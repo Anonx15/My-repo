@@ -10,9 +10,7 @@ URL:            https://github.com/swaywm/sway
 Source0:        %{url}/archive/%{version}/sway-%{version}.tar.gz
 
 BuildRequires:  meson >= 1.3
-BuildRequires:  ninja-build
-BuildRequires:  clang
-BuildRequires:  lld
+%include Packaging/rpm/common/toolchain-buildrequires.inc
 BuildRequires:  scdoc
 BuildRequires:  pkgconfig(wlroots-0.20) >= 0.20.0
 BuildRequires:  pkgconfig(wayland-server) >= 1.21
@@ -51,8 +49,7 @@ This build has swaybar and tray disabled.
 %autosetup -n sway-%{version}
 
 %build
-export CFLAGS="${CFLAGS} -flto=full"
-export LDFLAGS="${LDFLAGS} -flto=full"
+%include Packaging/rpm/common/lto-build-flags.inc
 
 %meson \
     -Dwerror=false \

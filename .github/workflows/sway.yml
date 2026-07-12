@@ -61,30 +61,28 @@ jobs:
       image: fedora:44
 
     steps:
-      - name: Install dependencies
-        run: |
-          dnf install -y --setopt=install_weak_deps=False \
-            @development-tools \
-            meson ninja-build rpm-build rpmdevtools \
-            clang lld llvm \
-            wayland-devel wayland-protocols-devel \
-            libinput-devel libxkbcommon-devel \
-            pixman-devel libdrm-devel mesa-libgbm-devel \
-            mesa-libEGL-devel mesa-libGLES-devel libglvnd-devel \
-            libseat-devel \
-            libdisplay-info-devel libliftoff-devel \
-            hwdata-devel \
-            json-c-devel pcre2-devel \
-            cairo-devel pango-devel \
-            libevdev-devel systemd-devel \
-            scdoc
-
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Set up Fedora RPM build environment
+        uses: ./.github/actions/setup-fedora-rpmbuild
+        with:
+          install-weak-deps: "false"
+          packages: >-
+            @development-tools
+            meson llvm
+            libinput-devel
+            pixman-devel libdrm-devel mesa-libgbm-devel
+            mesa-libEGL-devel mesa-libGLES-devel libglvnd-devel
+            libseat-devel
+            libdisplay-info-devel libliftoff-devel
+            hwdata-devel
+            json-c-devel pcre2-devel
+            cairo-devel
+            libevdev-devel systemd-devel
+
       - name: Download source tarballs
         run: |
-          rpmdev-setuptree
           curl --fail -L -o ~/rpmbuild/SOURCES/wlroots-${WLROOTS_VERSION}.tar.gz \
             "https://gitlab.freedesktop.org/wlroots/wlroots/-/archive/${WLROOTS_VERSION}/wlroots-${WLROOTS_VERSION}.tar.gz"
           curl --fail -L -o ~/rpmbuild/SOURCES/sway-${SWAY_VERSION}.tar.gz \

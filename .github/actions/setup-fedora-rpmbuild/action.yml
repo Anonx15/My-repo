@@ -1,0 +1,34 @@
+name: Setup Fedora RPM build environment
+description: >-
+  Install the RPM build tooling and dependencies shared across the packaging
+  workflows, then initialize the rpmbuild directory tree.
+
+inputs:
+  packages:
+    description: Space-separated project-specific packages to install alongside the shared base.
+    required: false
+    default: ""
+  install-weak-deps:
+    description: Whether dnf should pull in weak (recommended) dependencies.
+    required: false
+    default: "true"
+
+runs:
+  using: composite
+  steps:
+    - name: Install RPM build tooling and shared dependencies
+      shell: bash
+      run: |
+        dnf install -y --setopt=install_weak_deps=${{ inputs.install-weak-deps }} \
+          rpm-build \
+          rpmdevtools \
+          scdoc \
+          wayland-devel \
+          wayland-protocols-devel \
+          libxkbcommon-devel \
+          pango-devel \
+          ${{ inputs.packages }}
+
+    - name: Set up rpmbuild tree
+      shell: bash
+      run: rpmdev-setuptree
