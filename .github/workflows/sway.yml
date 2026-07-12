@@ -17,18 +17,10 @@ env:
   SWAY_VERSION: "1.12"
   SWAY_SHA256: a7b1becc217433c11c6284d36bcea0687b87b77b0ed26a384565292ec321f2b1
 
-  # Linker selection for meson (reads CC_LD to pick lld).
-  # CC itself is set by %global toolchain clang in the spec files,
-  # so we do NOT set CC here — that would conflict with Fedora's
-  # toolchain macro which sets CC, CXX, and adjusts %optflags.
-  CC_LD: lld
-
-  # CFLAGS/LDFLAGS are NOT set here.
-  # Reason: env-level CFLAGS leak into every `run:` step — dnf, curl,
-  # sha256sum all inherit them. Flags like -march=bdver2 are meaningless
-  # for package-management tools and -flto=full actively breaks them.
-  # Instead, the specs build their own CFLAGS inside %build using
-  # %{build_cflags} (Fedora's base flags) + our bdver2 additions.
+  BDVER2_CFLAGS: >-
+    -march=bdver2 -mprefer-vector-width=128 -mvzeroupper
+    -fomit-frame-pointer -flto=full
+  BDVER2_LDFLAGS: -flto=full -fuse-ld=lld -Wl,-O1
 
 jobs:
   build:
@@ -81,7 +73,11 @@ jobs:
           echo "${SWAY_SHA256}  ${sway_archive}" | sha256sum --check --strict
 
       - name: Build wlroots RPM
-        run: rpmbuild -ba Packaging/rpm/wlroots/wlroots.spec --define "_topdir $HOME/rpmbuild"
+        run: |
+          rpmbuild -ba Packaging/rpm/wlroots/wlroots.spec \
+            --define "_topdir $HOME/rpmbuild" \
+            --define "bdver2_cflags ${BDVER2_CFLAGS}" \
+            --define "bdver2_ldflags ${BDVER2_LDFLAGS}"
 
       - name: Install wlroots RPMs
         run: |
@@ -94,7 +90,11 @@ jobs:
           dnf install -y "${rpms[@]}"
 
       - name: Build sway RPM
-        run: rpmbuild -ba Packaging/rpm/sway/sway.spec --define "_topdir $HOME/rpmbuild"
+        run: |
+          rpmbuild -ba Packaging/rpm/sway/sway.spec \
+            --define "_topdir $HOME/rpmbuild" \
+            --define "bdver2_cflags ${BDVER2_CFLAGS}" \
+            --define "bdver2_ldflags ${BDVER2_LDFLAGS}"
 
       - name: Upload RPMs
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
