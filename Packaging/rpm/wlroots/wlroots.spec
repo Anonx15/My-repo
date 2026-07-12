@@ -1,6 +1,7 @@
 # wlroots 0.20.0 — DRM+libinput backends, GLES2 renderer only
 # No Xwayland, no X11 backend, no Vulkan renderer
 
+%global toolchain clang
 %global wlroots_soname 0.20
 
 Name:           wlroots
@@ -9,7 +10,7 @@ Release:        1%{?dist}
 Summary:        Modular Wayland compositor library
 License:        MIT
 URL:            https://gitlab.freedesktop.org/wlroots/wlroots
-Source0:        %{url}/-/archive/%{version}/wlroots-%{version}.tar.gz
+Source0:        %{url}/-/releases/%{version}/downloads/wlroots-%{version}.tar.gz
 
 BuildRequires:  meson >= 0.59
 BuildRequires:  ninja-build
@@ -30,6 +31,7 @@ BuildRequires:  pkgconfig(libdisplay-info) >= 0.1
 BuildRequires:  pkgconfig(libliftoff) >= 0.4
 BuildRequires:  pkgconfig(egl)
 BuildRequires:  pkgconfig(glesv2)
+BuildRequires:  pkgconfig(lcms2)
 BuildRequires:  hwdata-devel
 
 %description
@@ -45,11 +47,19 @@ Requires:       %{name}%{?_isa} = %{version}-%{release}
 Headers and pkg-config file for building against libwlroots.
 
 %prep
+# Release tarballs extract to wlroots-%{version}/
 %autosetup -n wlroots-%{version}
 
 %build
-export CFLAGS="${CFLAGS} -flto=full"
-export LDFLAGS="${LDFLAGS} -flto=full"
+# %{build_cflags} = Fedora's base flags (-O2, -g, hardening, etc.)
+# We append bdver2-specific flags on top.
+# -march=bdver2              : Piledriver instruction scheduling + ISA
+# -mprefer-vector-width=128  : avoid 256-bit AVX (Piledriver penalty)
+# -mvzeroupper               : clean AVX→SSE transitions
+# -fomit-frame-pointer       : reclaim RBP register (16 GPRs are scarce)
+# -flto=full                 : monolithic LTO for max cross-module optimization
+export CFLAGS="%{build_cflags} -march=bdver2 -mprefer-vector-width=128 -mvzeroupper -fomit-frame-pointer -flto=full"
+export LDFLAGS="%{build_ldflags} -flto=full -fuse-ld=lld -Wl,-O1"
 
 %meson \
     -Dwerror=false \
