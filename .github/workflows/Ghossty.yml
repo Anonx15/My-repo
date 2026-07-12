@@ -3,16 +3,31 @@ name: Build Ghostty RPM
 on:
   workflow_dispatch:
 
+permissions:
+  contents: read
+
+concurrency:
+  group: build-ghostty-rpm
+  cancel-in-progress: true
+
+env:
+  GHOSTTY_REF: 332b2aefc6e72d363aa93ab6ecfc86eeeeb5ed28
+  ZIG_VERSION: "0.15.2"
+  ZIG_SHA256: 02aa270f183da276e5b5920b1dac44a63f1a49e55050ebde3aecc9eb82f93239
+
 jobs:
   build:
+    name: Build Ghostty RPM
     runs-on: ubuntu-latest
+    timeout-minutes: 120
     container:
-      image: fedora:44
+      image: fedora@sha256:6c75d5bf57cb0fa5aa4b92c6a83c86c791644496d9ac230de7711f5b8ec3b898 # Fedora 44
     steps:
       - name: Checkout workflow repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           path: myrepo
+          persist-credentials: false
 
       - name: Set up Fedora RPM build environment
         uses: ./myrepo/.github/actions/setup-fedora-rpmbuild
@@ -25,18 +40,23 @@ jobs:
             libxml2-devel glib2-devel
             pkgconf-pkg-config ncurses
 
-      - name: Download Zig 0.15.2
+      - name: Download Zig
         run: |
-          wget -q https://ziglang.org/download/0.15.2/zig-x86_64-linux-0.15.2.tar.xz
-          tar -xf zig-x86_64-linux-0.15.2.tar.xz
-          echo "$PWD/zig-x86_64-linux-0.15.2" >> $GITHUB_PATH
+          archive="zig-x86_64-linux-${ZIG_VERSION}.tar.xz"
+          wget --https-only -q \
+            "https://ziglang.org/download/${ZIG_VERSION}/${archive}" \
+            -O "${archive}"
+          echo "${ZIG_SHA256}  ${archive}" | sha256sum --check --strict
+          tar -xf "${archive}"
+          echo "$PWD/zig-x86_64-linux-${ZIG_VERSION}" >> "$GITHUB_PATH"
 
       - name: Checkout Ghostty
-        uses: actions/checkout@v4
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           repository: ghostty-org/ghostty
-          ref: v1.3.1
+          ref: ${{ env.GHOSTTY_REF }}
           path: ghostty
+          persist-credentials: false
 
       - name: Fetch Zig dependencies
         working-directory: ghostty
@@ -48,7 +68,7 @@ jobs:
           zig build \
             -Doptimize=ReleaseFast \
             -Dcpu=bdver2 \
-            -Dpie=false \
+            -Dpie=true \
             -Dstrip=true \
             -Dfont-backend=fontconfig_freetype \
             -Dgtk-x11=false \
@@ -80,7 +100,7 @@ jobs:
             ~/rpmbuild/SPECS/ghostty.spec
 
       - name: Upload RPM
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: ghostty-1.3.1-fc44.rpm
           path: /github/home/rpmbuild/RPMS/x86_64/*.rpm
