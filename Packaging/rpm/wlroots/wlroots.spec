@@ -79,7 +79,7 @@ Headers and pkg-config file for building against libwlroots.
 %{_libdir}/libwlroots-%{wlroots_soname}.so
 
 %files devel
-%{_includedir}/wlr/
+%{_includedir}/wlroots-%{wlroots_soname}/
 %{_libdir}/pkgconfig/wlroots-%{wlroots_soname}.pc
 
 %changelog
