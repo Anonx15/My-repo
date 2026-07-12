@@ -17,51 +17,18 @@ env:
   SWAY_VERSION: "1.12"
   SWAY_SHA256: a7b1becc217433c11c6284d36bcea0687b87b77b0ed26a384565292ec321f2b1
 
-  # Compiler selection — only what meson actually reads for C projects
-  CC: clang
+  # Linker selection for meson (reads CC_LD to pick lld).
+  # CC itself is set by %global toolchain clang in the spec files,
+  # so we do NOT set CC here — that would conflict with Fedora's
+  # toolchain macro which sets CC, CXX, and adjusts %optflags.
   CC_LD: lld
 
-  # === CFLAGS for AMD FX-4320 (Piledriver / bdver2) ===
-  #
-  # -march=bdver2            : target Piledriver microarchitecture
-  # -mprefer-vector-width=128: auto-vectorizer uses 128-bit (Piledriver ALUs are
-  #                            128-bit; 256-bit ops split into 2 uops + store bug)
-  # -mvzeroupper             : insert VZEROUPPER to avoid AVX→SSE transition penalty
-  # -O2                      : balanced optimization (O3 bloats code, hurts 16KB L1)
-  # -pipe                    : use pipes not temp files between compiler stages
-  # -fstack-protector-strong : canary on functions with buffers (~1% cost)
-  # -D_FORTIFY_SOURCE=3      : compile+runtime bounds checking on libc functions
-  #                            (level 3 is safe with Clang 22 + glibc 2.43)
-  # -fomit-frame-pointer     : free up RBP as general register (bdver2 has only
-  #                            16 GPRs; RBP = ~6% of them; measurable on register-
-  #                            starved Piledriver). Overrides Fedora's default
-  #                            -fno-omit-frame-pointer which is for profiling.
-  #
-  CFLAGS: >-
-    -march=bdver2
-    -mprefer-vector-width=128
-    -mvzeroupper
-    -O2 -pipe
-    -fstack-protector-strong
-    -D_FORTIFY_SOURCE=3
-    -fomit-frame-pointer
-
-  # === LDFLAGS ===
-  #
-  # -fuse-ld=lld       : LLVM linker (best LTO integration with Clang)
-  # -Wl,--as-needed    : skip unused DT_NEEDED (faster startup, less RAM)
-  # -Wl,-z,relro       : GOT read-only after relocation (free security)
-  # -Wl,-z,now         : eager symbol resolution (free security, sway starts once)
-  # -Wl,-O1            : linker layout optimization
-  #
-  # NOTE: Fedora's %meson macro already injects relro/now/as-needed.
-  # Duplicates are harmless — the linker deduplicates them.
-  #
-  LDFLAGS: >-
-    -fuse-ld=lld
-    -Wl,--as-needed
-    -Wl,-z,relro -Wl,-z,now
-    -Wl,-O1
+  # CFLAGS/LDFLAGS are NOT set here.
+  # Reason: env-level CFLAGS leak into every `run:` step — dnf, curl,
+  # sha256sum all inherit them. Flags like -march=bdver2 are meaningless
+  # for package-management tools and -flto=full actively breaks them.
+  # Instead, the specs build their own CFLAGS inside %build using
+  # %{build_cflags} (Fedora's base flags) + our bdver2 additions.
 
 jobs:
   build:
@@ -85,6 +52,7 @@ jobs:
             libseat-devel \
             libdisplay-info-devel libliftoff-devel \
             hwdata-devel \
+            lcms2-devel \
             json-c-devel pcre2-devel \
             cairo-devel pango-devel \
             libevdev-devel systemd-devel \
@@ -100,12 +68,15 @@ jobs:
           rpmdev-setuptree
           wlroots_archive="$HOME/rpmbuild/SOURCES/wlroots-${WLROOTS_VERSION}.tar.gz"
           sway_archive="$HOME/rpmbuild/SOURCES/sway-${SWAY_VERSION}.tar.gz"
+
           curl --proto '=https' --tlsv1.2 --fail --location \
             --output "${wlroots_archive}" \
             "https://gitlab.freedesktop.org/wlroots/wlroots/-/releases/${WLROOTS_VERSION}/downloads/wlroots-${WLROOTS_VERSION}.tar.gz"
+
           curl --proto '=https' --tlsv1.2 --fail --location \
             --output "${sway_archive}" \
             "https://github.com/swaywm/sway/releases/download/${SWAY_VERSION}/sway-${SWAY_VERSION}.tar.gz"
+
           echo "${WLROOTS_SHA256}  ${wlroots_archive}" | sha256sum --check --strict
           echo "${SWAY_SHA256}  ${sway_archive}" | sha256sum --check --strict
 
@@ -123,13 +94,7 @@ jobs:
           dnf install -y "${rpms[@]}"
 
       - name: Build sway RPM
-        run: |
-          spec="$(find . -name sway.spec -print -quit)"
-          if [ -z "$spec" ]; then
-            echo "::error::sway.spec not found in repository" >&2
-            exit 1
-          fi
-          rpmbuild -ba "$spec" --define "_topdir $HOME/rpmbuild"
+        run: rpmbuild -ba Packaging/rpm/sway/sway.spec --define "_topdir $HOME/rpmbuild"
 
       - name: Upload RPMs
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
