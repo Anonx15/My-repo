@@ -17,11 +17,6 @@ env:
   SWAY_VERSION: "1.12"
   SWAY_SHA256: a7b1becc217433c11c6284d36bcea0687b87b77b0ed26a384565292ec321f2b1
 
-  BDVER2_CFLAGS: >-
-    -march=bdver2 -mprefer-vector-width=128 -mvzeroupper
-    -fomit-frame-pointer -flto=full
-  BDVER2_LDFLAGS: -flto=full -fuse-ld=lld -Wl,-O1
-
 jobs:
   build:
     name: Build Sway and wlroots RPMs
@@ -75,9 +70,7 @@ jobs:
       - name: Build wlroots RPM
         run: |
           rpmbuild -ba Packaging/rpm/wlroots/wlroots.spec \
-            --define "_topdir $HOME/rpmbuild" \
-            --define "bdver2_cflags ${BDVER2_CFLAGS}" \
-            --define "bdver2_ldflags ${BDVER2_LDFLAGS}"
+            --define "_topdir $HOME/rpmbuild"
 
       - name: Install wlroots RPMs
         run: |
@@ -92,9 +85,7 @@ jobs:
       - name: Build sway RPM
         run: |
           rpmbuild -ba Packaging/rpm/sway/sway.spec \
-            --define "_topdir $HOME/rpmbuild" \
-            --define "bdver2_cflags ${BDVER2_CFLAGS}" \
-            --define "bdver2_ldflags ${BDVER2_LDFLAGS}"
+            --define "_topdir $HOME/rpmbuild"
 
       - name: Upload RPMs
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
