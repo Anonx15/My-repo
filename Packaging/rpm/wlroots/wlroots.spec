@@ -3,6 +3,10 @@
 
 %global toolchain clang
 %global wlroots_soname 0.20
+%{!?bdver2_cflags:%global bdver2_cflags -march=bdver2 -mprefer-vector-width=128 -mvzeroupper -fomit-frame-pointer -flto=full}
+%{!?bdver2_ldflags:%global bdver2_ldflags -flto=full -fuse-ld=lld -Wl,-O1}
+%global build_cflags %{build_cflags} %{bdver2_cflags}
+%global build_ldflags %{build_ldflags} %{bdver2_ldflags}
 
 Name:           wlroots
 Version:        0.20.0
@@ -58,9 +62,6 @@ Headers and pkg-config file for building against libwlroots.
 # -mvzeroupper               : clean AVX→SSE transitions
 # -fomit-frame-pointer       : reclaim RBP register (16 GPRs are scarce)
 # -flto=full                 : monolithic LTO for max cross-module optimization
-export CFLAGS="%{build_cflags} -march=bdver2 -mprefer-vector-width=128 -mvzeroupper -fomit-frame-pointer -flto=full"
-export LDFLAGS="%{build_ldflags} -flto=full -fuse-ld=lld -Wl,-O1"
-
 %meson \
     -Dwerror=false \
     -Dexamples=false \
@@ -75,14 +76,13 @@ export LDFLAGS="%{build_ldflags} -flto=full -fuse-ld=lld -Wl,-O1"
 %files
 %license LICENSE
 %doc README.md
-%{_libdir}/libwlroots-%{wlroots_soname}.so.*
+%{_libdir}/libwlroots-%{wlroots_soname}.so
 
 %files devel
-%{_includedir}/wlr/
-%{_libdir}/libwlroots-%{wlroots_soname}.so
+%{_includedir}/wlroots-%{wlroots_soname}/
 %{_libdir}/pkgconfig/wlroots-%{wlroots_soname}.pc
 
 %changelog
-* Sat Jul 12 2026 Builder <builder@localhost> - 0.20.0-1
+* Sun Jul 12 2026 Builder <builder@localhost> - 0.20.0-1
 - wlroots 0.20.0 with DRM+libinput, GLES2 renderer
 - Built with Clang+LLD full LTO for AMD FX-4320
