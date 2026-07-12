@@ -94,10 +94,8 @@ This build has swaybar and tray disabled.
 %{_mandir}/man7/sway-ipc.7*
 %{_datadir}/bash-completion/completions/sway
 %{_datadir}/bash-completion/completions/swaymsg
-%{_datadir}/bash-completion/completions/swaynag
 %{_datadir}/zsh/site-functions/_sway
 %{_datadir}/zsh/site-functions/_swaymsg
-%{_datadir}/zsh/site-functions/_swaynag
 
 %changelog
 * Sun Jul 12 2026 Builder <builder@localhost> - 1.12-1
