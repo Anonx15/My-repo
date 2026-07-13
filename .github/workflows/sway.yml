@@ -101,6 +101,6 @@ jobs:
         with:
           name: rpms-sway-${{ env.SWAY_VERSION }}-wlroots-${{ env.WLROOTS_VERSION }}-bdver2
           path: |
-            /root/rpmbuild/RPMS/x86_64/*.rpm
-            /root/rpmbuild/SRPMS/*.rpm
+            /github/home/rpmbuild/RPMS/**/*.rpm
+            /github/home/rpmbuild/SRPMS/*.rpm
           retention-days: 30
