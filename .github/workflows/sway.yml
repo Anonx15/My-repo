@@ -1,4 +1,4 @@
-: Build Sway + wlroots RPMs
+name: Build Sway + wlroots RPMs
 
 on:
   workflow_dispatch:
