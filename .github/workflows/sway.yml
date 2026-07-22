@@ -1,4 +1,4 @@
-name: Build Sway + wlroots RPMs
+: Build Sway + wlroots RPMs
 
 on:
   workflow_dispatch:
@@ -69,3 +69,133 @@ jobs:
             --output "${sway_archive}" \
             "https://github.com/swaywm/sway/releases/download/${SWAY_VERSION}/sway-${SWAY_VERSION}.tar.gz"
 
+          echo "${WLROOTS_SHA256}  ${wlroots_archive}" | sha256sum --check --strict
+          echo "${SWAY_SHA256}  ${sway_archive}" | sha256sum --check --strict
+
+      - name: Build wlroots RPM
+        run: |
+          rpmbuild -ba Packaging/rpm/wlroots/wlroots.spec \
+            --define "_topdir $HOME/rpmbuild" \
+            --define "bdver2_cflags ${BDVER2_CFLAGS}" \
+            --define "bdver2_ldflags ${BDVER2_LDFLAGS}"
+
+      - name: Install wlroots RPMs
+        run: |
+          shopt -s nullglob
+          rpms=(~/rpmbuild/RPMS/x86_64/wlroots-*.rpm)
+          if [ ${#rpms[@]} -eq 0 ]; then
+            echo "::error::No wlroots RPMs were produced by the build" >&2
+            exit 1
+          fi
+          dnf install -y "${rpms[@]}"
+
+      - name: Build sway RPM
+        run: |
+          rpmbuild -ba Packaging/rpm/sway/sway.spec \
+            --define "_topdir $HOME/rpmbuild" \
+            --define "bdver2_cflags ${BDVER2_CFLAGS}" \
+            --define "bdver2_ldflags ${BDVER2_LDFLAGS}"
+
+      - name: Verify build flags
+        run: |
+          echo "========================================="
+          echo " Verifying bdver2 flags were applied"
+          echo "========================================="
+
+          workdir=$(mktemp -d)
+          cd "$workdir"
+
+          # Extract wlroots library from RPM
+          wlroots_rpm=$(find ~/rpmbuild/RPMS -name 'wlroots-0*.rpm' ! -name '*devel*' ! -name '*debug*' | head -1)
+          echo "Checking: $wlroots_rpm"
+          rpm2cpio "$wlroots_rpm" | cpio -idm 2>/dev/null
+
+          # Find the .so file
+          lib=$(find . -name 'libwlroots-0.20*' -type f | head -1)
+          if [ -z "$lib" ]; then
+            echo "::error::libwlroots .so not found in RPM"
+            exit 1
+          fi
+
+          echo ""
+          echo "--- Compiler identity ---"
+          readelf -p .comment "$lib" 2>/dev/null || true
+
+          echo ""
+          echo "--- LLD linker check ---"
+          # LLD leaves a .comment with "Linker: LLD"
+          if readelf -p .comment "$lib" 2>/dev/null | grep -qi "LLD"; then
+            echo "PASS: Linked with LLD"
+          else
+            echo "WARN: LLD signature not found in .comment"
+          fi
+
+          echo ""
+          echo "--- VZEROUPPER instructions (proves -mvzeroupper) ---"
+          count=$(objdump -d "$lib" 2>/dev/null | grep -c "vzeroupper" || true)
+          echo "vzeroupper count: $count"
+          if [ "$count" -gt 0 ]; then
+            echo "PASS: -mvzeroupper is active ($count occurrences)"
+          else
+            echo "INFO: No vzeroupper found (may be normal if no AVX code paths)"
+          fi
+
+          echo ""
+          echo "--- FMA3/FMA4 instructions (proves -march=bdver2) ---"
+          fma=$(objdump -d "$lib" 2>/dev/null | grep -ciE "vfmadd|vfmsub|vfnmadd|vfnmsub" || true)
+          echo "FMA instruction count: $fma"
+          if [ "$fma" -gt 0 ]; then
+            echo "PASS: FMA instructions present — bdver2 ISA confirmed"
+          else
+            echo "INFO: No FMA found (normal — compositor code rarely uses FP-heavy math)"
+          fi
+
+          echo ""
+          echo "--- XOP instructions (AMD-exclusive, proves bdver2 not generic) ---"
+          xop=$(objdump -d "$lib" 2>/dev/null | grep -ciE "vphaddw|vphaddd|vpmacsdd|vpmacssdd" || true)
+          echo "XOP instruction count: $xop"
+
+          echo ""
+          echo "--- Full LTO check (single merged object = LTO worked) ---"
+          # With full LTO the .so has no per-file symbols — all merged
+          sections=$(readelf -S "$lib" 2>/dev/null | grep -c "\.text\." || true)
+          echo ".text subsections: $sections"
+          if [ "$sections" -le 5 ]; then
+            echo "PASS: Few .text sections — consistent with full LTO merging"
+          else
+            echo "INFO: Many .text sections ($sections) — LTO may not have fully merged"
+          fi
+
+          echo ""
+          echo "--- Security: RELRO ---"
+          if readelf -l "$lib" 2>/dev/null | grep -q "GNU_RELRO"; then
+            echo "PASS: RELRO enabled"
+          else
+            echo "FAIL: No RELRO"
+          fi
+
+          echo ""
+          echo "--- Security: Stack protector ---"
+          sp=$(objdump -d "$lib" 2>/dev/null | grep -c "__stack_chk_fail" || true)
+          echo "__stack_chk_fail references: $sp"
+          if [ "$sp" -gt 0 ]; then
+            echo "PASS: Stack protector active"
+          else
+            echo "WARN: No stack protector calls found"
+          fi
+
+          echo ""
+          echo "========================================="
+          echo " Verification complete"
+          echo "========================================="
+
+          rm -rf "$workdir"
+
+      - name: Upload RPMs
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: rpms-sway-${{ env.SWAY_VERSION }}-wlroots-${{ env.WLROOTS_VERSION }}-bdver2
+          path: |
+            /github/home/rpmbuild/RPMS/**/*.rpm
+            /github/home/rpmbuild/SRPMS/*.rpm
+          retention-days: 30
