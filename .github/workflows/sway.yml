@@ -36,7 +36,7 @@ jobs:
           dnf install -y --setopt=install_weak_deps=False \
             @development-tools \
             meson ninja-build rpm-build rpmdevtools \
-            clang lld llvm \
+            clang lld llvm binutils \
             wayland-devel wayland-protocols-devel \
             libinput-devel libxkbcommon-devel \
             pixman-devel libdrm-devel mesa-libgbm-devel \
@@ -69,38 +69,3 @@ jobs:
             --output "${sway_archive}" \
             "https://github.com/swaywm/sway/releases/download/${SWAY_VERSION}/sway-${SWAY_VERSION}.tar.gz"
 
-          echo "${WLROOTS_SHA256}  ${wlroots_archive}" | sha256sum --check --strict
-          echo "${SWAY_SHA256}  ${sway_archive}" | sha256sum --check --strict
-
-      - name: Build wlroots RPM
-        run: |
-          rpmbuild -ba Packaging/rpm/wlroots/wlroots.spec \
-            --define "_topdir $HOME/rpmbuild" \
-            --define "bdver2_cflags ${BDVER2_CFLAGS}" \
-            --define "bdver2_ldflags ${BDVER2_LDFLAGS}"
-
-      - name: Install wlroots RPMs
-        run: |
-          shopt -s nullglob
-          rpms=(~/rpmbuild/RPMS/x86_64/wlroots-*.rpm)
-          if [ ${#rpms[@]} -eq 0 ]; then
-            echo "::error::No wlroots RPMs were produced by the build" >&2
-            exit 1
-          fi
-          dnf install -y "${rpms[@]}"
-
-      - name: Build sway RPM
-        run: |
-          rpmbuild -ba Packaging/rpm/sway/sway.spec \
-            --define "_topdir $HOME/rpmbuild" \
-            --define "bdver2_cflags ${BDVER2_CFLAGS}" \
-            --define "bdver2_ldflags ${BDVER2_LDFLAGS}"
-
-      - name: Upload RPMs
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: rpms-sway-${{ env.SWAY_VERSION }}-wlroots-${{ env.WLROOTS_VERSION }}-bdver2
-          path: |
-            /github/home/rpmbuild/RPMS/**/*.rpm
-            /github/home/rpmbuild/SRPMS/*.rpm
-          retention-days: 30
