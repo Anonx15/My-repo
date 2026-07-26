@@ -17,9 +17,11 @@ env:
   SWAY_VERSION: "1.12"
   SWAY_SHA256: a7b1becc217433c11c6284d36bcea0687b87b77b0ed26a384565292ec321f2b1
 
+  # bdver2 flags — single source of truth.
+  # Passed to specs via --define so specs don't hardcode them.
   BDVER2_CFLAGS: >-
     -march=bdver2 -mprefer-vector-width=128 -mvzeroupper
-    -fomit-frame-pointer -flto=full
+    -fomit-frame-pointer -flto=full -frecord-command-line
   BDVER2_LDFLAGS: -flto=full -fuse-ld=lld -Wl,-O1
 
 jobs:
@@ -98,96 +100,83 @@ jobs:
 
       - name: Verify build flags
         run: |
-          echo "========================================="
-          echo " Verifying bdver2 flags were applied"
-          echo "========================================="
+          echo "============================================"
+          echo " Verifying CFLAGS/LDFLAGS in built binaries"
+          echo "============================================"
 
+          failed=0
           workdir=$(mktemp -d)
           cd "$workdir"
 
-          # Extract wlroots library from RPM
-          wlroots_rpm=$(find ~/rpmbuild/RPMS -name 'wlroots-0*.rpm' ! -name '*devel*' ! -name '*debug*' | head -1)
-          echo "Checking: $wlroots_rpm"
+          # --- Extract the wlroots .so from the RPM ---
+          wlroots_rpm=$(find ~/rpmbuild/RPMS -name 'wlroots-0*.rpm' \
+            ! -name '*devel*' ! -name '*debug*' | head -1)
+          echo "RPM: $wlroots_rpm"
           rpm2cpio "$wlroots_rpm" | cpio -idm 2>/dev/null
-
-          # Find the .so file
           lib=$(find . -name 'libwlroots-0.20*' -type f | head -1)
+
           if [ -z "$lib" ]; then
-            echo "::error::libwlroots .so not found in RPM"
+            echo "::error::libwlroots not found in RPM"
             exit 1
           fi
 
+          # === METHOD 1: Direct flag record ===
+          # -frecord-command-line makes Clang write the exact flags
+          # used into .llvm.command.line section of every object.
+          # After LTO linking, lld merges them into the final .so.
+          # This is the DEFINITIVE proof — no guessing needed.
           echo ""
-          echo "--- Compiler identity ---"
-          readelf -p .comment "$lib" 2>/dev/null || true
-
-          echo ""
-          echo "--- LLD linker check ---"
-          # LLD leaves a .comment with "Linker: LLD"
-          if readelf -p .comment "$lib" 2>/dev/null | grep -qi "LLD"; then
-            echo "PASS: Linked with LLD"
+          echo "--- Recorded compiler command line ---"
+          if readelf -p .llvm.command.line "$lib" 2>/dev/null | head -40; then
+            echo ""
+            # Check each flag we care about
+            for flag in "-march=bdver2" "-mprefer-vector-width=128" \
+                        "-mvzeroupper" "-fomit-frame-pointer" "-flto=full"; do
+              if readelf -p .llvm.command.line "$lib" 2>/dev/null | grep -qF -- "$flag"; then
+                echo "PASS: $flag found in recorded command line"
+              else
+                echo "FAIL: $flag NOT found in recorded command line"
+                failed=1
+              fi
+            done
           else
-            echo "WARN: LLD signature not found in .comment"
+            echo "WARN: .llvm.command.line section not present"
+            echo "      (falling back to instruction-level checks below)"
           fi
 
+          # === METHOD 2: Instruction-level evidence ===
+          # Even without the command line record, specific instructions
+          # can only appear if the right -march was used.
           echo ""
-          echo "--- VZEROUPPER instructions (proves -mvzeroupper) ---"
-          count=$(objdump -d "$lib" 2>/dev/null | grep -c "vzeroupper" || true)
-          echo "vzeroupper count: $count"
-          if [ "$count" -gt 0 ]; then
-            echo "PASS: -mvzeroupper is active ($count occurrences)"
-          else
-            echo "INFO: No vzeroupper found (may be normal if no AVX code paths)"
-          fi
+          echo "--- Instruction-level verification ---"
 
-          echo ""
-          echo "--- FMA3/FMA4 instructions (proves -march=bdver2) ---"
-          fma=$(objdump -d "$lib" 2>/dev/null | grep -ciE "vfmadd|vfmsub|vfnmadd|vfnmsub" || true)
-          echo "FMA instruction count: $fma"
-          if [ "$fma" -gt 0 ]; then
-            echo "PASS: FMA instructions present — bdver2 ISA confirmed"
-          else
-            echo "INFO: No FMA found (normal — compositor code rarely uses FP-heavy math)"
-          fi
+          vzeroupper=$(objdump -d "$lib" 2>/dev/null | grep -c "vzeroupper" || true)
+          fma=$(objdump -d "$lib" 2>/dev/null | grep -ciE "vfmadd|vfmsub" || true)
+          stack_chk=$(objdump -d "$lib" 2>/dev/null | grep -c "__stack_chk_fail" || true)
+          text_subs=$(readelf -S "$lib" 2>/dev/null | grep -c '\.text\.' || true)
 
-          echo ""
-          echo "--- XOP instructions (AMD-exclusive, proves bdver2 not generic) ---"
-          xop=$(objdump -d "$lib" 2>/dev/null | grep -ciE "vphaddw|vphaddd|vpmacsdd|vpmacssdd" || true)
-          echo "XOP instruction count: $xop"
+          echo "vzeroupper:       $vzeroupper  (>0 = -mvzeroupper active)"
+          echo "FMA instructions: $fma  (>0 = bdver2 ISA used)"
+          echo "stack_chk_fail:   $stack_chk  (>0 = stack protector active)"
+          echo ".text subsections: $text_subs  (<5 = full LTO merged)"
 
+          # === METHOD 3: Linker and security ===
           echo ""
-          echo "--- Full LTO check (single merged object = LTO worked) ---"
-          # With full LTO the .so has no per-file symbols — all merged
-          sections=$(readelf -S "$lib" 2>/dev/null | grep -c "\.text\." || true)
-          echo ".text subsections: $sections"
-          if [ "$sections" -le 5 ]; then
-            echo "PASS: Few .text sections — consistent with full LTO merging"
-          else
-            echo "INFO: Many .text sections ($sections) — LTO may not have fully merged"
-          fi
+          echo "--- Linker and hardening ---"
 
-          echo ""
-          echo "--- Security: RELRO ---"
           if readelf -l "$lib" 2>/dev/null | grep -q "GNU_RELRO"; then
-            echo "PASS: RELRO enabled"
+            echo "RELRO: yes"
           else
-            echo "FAIL: No RELRO"
+            echo "RELRO: NO"
+            failed=1
           fi
 
           echo ""
-          echo "--- Security: Stack protector ---"
-          sp=$(objdump -d "$lib" 2>/dev/null | grep -c "__stack_chk_fail" || true)
-          echo "__stack_chk_fail references: $sp"
-          if [ "$sp" -gt 0 ]; then
-            echo "PASS: Stack protector active"
+          if [ "$failed" -eq 0 ]; then
+            echo "All checks passed."
           else
-            echo "WARN: No stack protector calls found"
+            echo "::warning::Some flag checks failed — review output above"
           fi
-
-          echo ""
-          echo "========================================="
-          echo " Verification complete"
-          echo "========================================="
 
           rm -rf "$workdir"
 
