@@ -172,13 +172,14 @@ jobs:
           fi
 
           echo ""
-          if [ "$failed" -eq 0 ]; then
-            echo "All checks passed."
-          else
-            echo "::warning::Some flag checks failed — review output above"
-          fi
-
+          cd /
           rm -rf "$workdir"
+
+          if [ "$failed" -ne 0 ]; then
+            echo "::error::Build flag / hardening verification failed — review output above"
+            exit 1
+          fi
+          echo "All checks passed."
 
       - name: Upload RPMs
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
