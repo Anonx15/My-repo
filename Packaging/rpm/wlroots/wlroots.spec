@@ -3,10 +3,6 @@
 
 %global toolchain clang
 %global wlroots_soname 0.20
-%{!?bdver2_cflags:%global bdver2_cflags -march=bdver2 -mprefer-vector-width=128 -mvzeroupper -fomit-frame-pointer -flto=full}
-%{!?bdver2_ldflags:%global bdver2_ldflags -flto=full -fuse-ld=lld -Wl,-O1}
-%global build_cflags %{build_cflags} %{bdver2_cflags}
-%global build_ldflags %{build_ldflags} %{bdver2_ldflags}
 
 Name:           wlroots
 Version:        0.20.0
@@ -51,17 +47,16 @@ Requires:       %{name}%{?_isa} = %{version}-%{release}
 Headers and pkg-config file for building against libwlroots.
 
 %prep
-# Release tarballs extract to wlroots-%{version}/
 %autosetup -n wlroots-%{version}
 
 %build
-# %{build_cflags} = Fedora's base flags (-O2, -g, hardening, etc.)
-# We append bdver2-specific flags on top.
-# -march=bdver2              : Piledriver instruction scheduling + ISA
-# -mprefer-vector-width=128  : avoid 256-bit AVX (Piledriver penalty)
-# -mvzeroupper               : clean AVX→SSE transitions
-# -fomit-frame-pointer       : reclaim RBP register (16 GPRs are scarce)
-# -flto=full                 : monolithic LTO for max cross-module optimization
+# Fedora's %{build_cflags} = base flags (-O2, -g, hardening, etc.)
+# %{bdver2_cflags} = our overrides, passed via rpmbuild --define from the workflow.
+# Appended after Fedora's flags so last-wins applies (e.g. our -march=bdver2
+# overrides Fedora's -march=x86-64). Same for LDFLAGS.
+export CFLAGS="%{build_cflags} %{?bdver2_cflags}"
+export LDFLAGS="%{build_ldflags} %{?bdver2_ldflags}"
+
 %meson \
     -Dwerror=false \
     -Dexamples=false \
@@ -76,13 +71,14 @@ Headers and pkg-config file for building against libwlroots.
 %files
 %license LICENSE
 %doc README.md
-%{_libdir}/libwlroots-%{wlroots_soname}.so
+%{_libdir}/libwlroots-%{wlroots_soname}.so.*
 
 %files devel
-%{_includedir}/wlroots-%{wlroots_soname}/
+%{_includedir}/wlr/
+%{_libdir}/libwlroots-%{wlroots_soname}.so
 %{_libdir}/pkgconfig/wlroots-%{wlroots_soname}.pc
 
 %changelog
-* Sun Jul 12 2026 Builder <builder@localhost> - 0.20.0-1
+* Sat Jul 12 2026 Builder <builder@localhost> - 0.20.0-1
 - wlroots 0.20.0 with DRM+libinput, GLES2 renderer
 - Built with Clang+LLD full LTO for AMD FX-4320
