@@ -37,12 +37,19 @@ install -Dm755 %{_sourcedir}/output/bin/ghostty \
 install -Dm644 %{_sourcedir}/com.mitchellh.ghostty.desktop \
                %{buildroot}%{_datadir}/applications/com.mitchellh.ghostty.desktop
 
-# Terminfo installation (robust - handles missing files gracefully)
-install -Dm644 %{_sourcedir}/output/share/terminfo/x/xterm-ghostty \
-               %{buildroot}%{_datadir}/terminfo/x/xterm-ghostty 2>/dev/null || true
-
-install -Dm644 %{_sourcedir}/output/share/terminfo/g/ghostty \
-               %{buildroot}%{_datadir}/terminfo/g/ghostty 2>/dev/null || true
+# Terminfo installation
+# These were previously installed with `2>/dev/null || true`, which hid any
+# failure here only for the build to fail later with a confusing "file not
+# found" from %files (which lists both paths as mandatory). Fail loudly and
+# early instead, with a message that says what is actually missing.
+for tinfo in x/xterm-ghostty g/ghostty; do
+    src="%{_sourcedir}/output/share/terminfo/${tinfo}"
+    if [ ! -f "${src}" ]; then
+        echo "ERROR: expected terminfo file missing from build output: ${src}" >&2
+        exit 1
+    fi
+    install -Dm644 "${src}" "%{buildroot}%{_datadir}/terminfo/${tinfo}"
+done
 
 # Icons and resources
 cp -r %{_sourcedir}/output/share/icons \
@@ -56,7 +63,9 @@ cp -r %{_sourcedir}/output/share/ghostty \
 %{_datadir}/applications/com.mitchellh.ghostty.desktop
 %{_datadir}/terminfo/x/xterm-ghostty
 %{_datadir}/terminfo/g/ghostty
-%{_datadir}/icons/
+# Only claim this package's own icon files, not the shared
+# datadir icons tree (owned by the filesystem/hicolor packages).
+%{_datadir}/icons/hicolor/*/apps/com.mitchellh.ghostty.png
 %{_datadir}/ghostty/
 
 %post
