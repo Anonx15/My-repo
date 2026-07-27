@@ -79,6 +79,6 @@ export LDFLAGS="%{build_ldflags} %{?bdver2_ldflags}"
 %{_libdir}/pkgconfig/wlroots-%{wlroots_soname}.pc
 
 %changelog
-* Sat Jul 26 2026 Builder <builder@localhost> - 0.20.0-1
+* Sat Jul 27 2026 Builder <builder@localhost> - 0.20.0-1
 - wlroots 0.20.0 with DRM+libinput, GLES2 renderer
 - Built with Clang+LLD full LTO for AMD FX-4320
