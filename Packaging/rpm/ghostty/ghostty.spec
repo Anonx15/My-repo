@@ -70,10 +70,19 @@ cp -r %{_sourcedir}/output/share/ghostty \
 
 %post
 # Compile terminfo database (fixes "xterm-ghostty: unknown terminal type")
+# A tic failure leaves the terminal type unusable, so report it loudly on
+# stderr instead of discarding it (a failed %post must not abort the install).
 if [ -f %{_datadir}/terminfo/x/xterm-ghostty ]; then
-    tic -x %{_datadir}/terminfo/x/xterm-ghostty 2>/dev/null || true
+    tic -x %{_datadir}/terminfo/x/xterm-ghostty || \
+        echo "WARNING: tic failed to compile %{_datadir}/terminfo/x/xterm-ghostty;" \
+             "'xterm-ghostty: unknown terminal type' errors are likely" >&2
 elif [ -f %{_datadir}/terminfo/g/ghostty ]; then
-    tic -x %{_datadir}/terminfo/g/ghostty 2>/dev/null || true
+    tic -x %{_datadir}/terminfo/g/ghostty || \
+        echo "WARNING: tic failed to compile %{_datadir}/terminfo/g/ghostty;" \
+             "'ghostty: unknown terminal type' errors are likely" >&2
+else
+    echo "WARNING: no ghostty terminfo file found under %{_datadir}/terminfo;" \
+         "terminal type will be unknown" >&2
 fi
 
 update-desktop-database %{_datadir}/applications 2>/dev/null || true
