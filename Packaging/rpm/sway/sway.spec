@@ -92,12 +92,10 @@ export LDFLAGS="%{build_ldflags} %{?bdver2_ldflags}"
 %{_mandir}/man7/sway-ipc.7*
 %{_datadir}/bash-completion/completions/sway
 %{_datadir}/bash-completion/completions/swaymsg
-%{_datadir}/bash-completion/completions/swaynag
 %{_datadir}/zsh/site-functions/_sway
 %{_datadir}/zsh/site-functions/_swaymsg
-%{_datadir}/zsh/site-functions/_swaynag
 
 %changelog
-* Sat Jul 26 2026 Builder <builder@localhost> - 1.12-1
+* Sat Jul 27 2026 Builder <builder@localhost> - 1.12-1
 - sway 1.12 without swaybar/tray
 - Built with Clang+LLD full LTO for AMD FX-4320
