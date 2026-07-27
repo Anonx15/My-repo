@@ -66,6 +66,7 @@ jobs:
 
       - name: Download source tarballs
         run: |
+          set -euo pipefail
           rpmdev-setuptree
           wlroots_archive="$HOME/rpmbuild/SOURCES/wlroots-${WLROOTS_VERSION}.tar.gz"
           sway_archive="$HOME/rpmbuild/SOURCES/sway-${SWAY_VERSION}.tar.gz"
@@ -83,6 +84,7 @@ jobs:
 
       - name: Build wlroots RPM
         run: |
+          set -euo pipefail
           rpmbuild -ba Packaging/rpm/wlroots/wlroots.spec \
             --define "_topdir $HOME/rpmbuild" \
             --define "bdver2_cflags ${BDVER2_CFLAGS}" \
@@ -90,6 +92,7 @@ jobs:
 
       - name: Install wlroots RPMs
         run: |
+          set -euo pipefail
           shopt -s nullglob
           rpms=(~/rpmbuild/RPMS/x86_64/wlroots-*.rpm)
           if [ ${#rpms[@]} -eq 0 ]; then
@@ -100,6 +103,7 @@ jobs:
 
       - name: Build sway RPM
         run: |
+          set -euo pipefail
           rpmbuild -ba Packaging/rpm/sway/sway.spec \
             --define "_topdir $HOME/rpmbuild" \
             --define "bdver2_cflags ${BDVER2_CFLAGS}" \
@@ -107,29 +111,91 @@ jobs:
 
       - name: Verify build flags
         run: |
+          set -euo pipefail
           echo "=== Verifying bdver2 optimization in built RPMs ==="
-          workdir=$(mktemp -d) && cd "$workdir"
 
-          rpm=$(find ~/rpmbuild/RPMS -name "wlroots-0*.rpm" ! -name "*devel*" ! -name "*debug*" | head -1)
+          failed=0
+          workdir=$(mktemp -d)
+          trap 'rm -rf "$workdir"' EXIT
+          cd "$workdir"
+
+          rpm=$(find ~/rpmbuild/RPMS -name "wlroots-0*.rpm" ! -name "*devel*" ! -name "*debug*" | head -1 || true)
+          if [ -z "$rpm" ]; then
+            echo "::error::No wlroots RPM found to verify" >&2
+            exit 1
+          fi
           echo "Checking: $rpm"
           rpm2cpio "$rpm" | cpio -idm 2>/dev/null
-          lib=$(find . -name "libwlroots-0.20*" -type f | head -1)
+          lib=$(find . -name "libwlroots-0.20*" -type f | head -1 || true)
+          if [ -z "$lib" ]; then
+            echo "::error::libwlroots not found inside $rpm" >&2
+            exit 1
+          fi
+
+          echo ""
+          echo "--- Recorded compiler command line ---"
+          cmdline=$(readelf -p .llvm.command.line "$lib" 2>/dev/null || true)
+          if [ -n "$cmdline" ]; then
+            printf '%s\n' "$cmdline" | head -40
+            for flag in "-march=bdver2" "-mprefer-vector-width=128" \
+                        "-mvzeroupper" "-fomit-frame-pointer" "-flto=full"; do
+              if printf '%s\n' "$cmdline" | grep -qF -- "$flag"; then
+                echo "PASS: $flag found in recorded command line"
+              else
+                echo "FAIL: $flag NOT found in recorded command line"
+                failed=1
+              fi
+            done
+          else
+            echo "WARN: .llvm.command.line section not present"
+            echo "      (relying on the instruction-level checks below)"
+          fi
 
           echo ""
           echo "--- ISA verification ---"
-          vz=$(objdump -d "$lib" 2>/dev/null | grep -c "vzeroupper" || true)
-          fma=$(objdump -d "$lib" 2>/dev/null | grep -ciE "vfmadd|vfmsub" || true)
-          sp=$(objdump -d "$lib" 2>/dev/null | grep -c "__stack_chk_fail" || true)
-          lto=$(readelf -S "$lib" 2>/dev/null | grep -c '\.text\.' || true)
-          relro=$(readelf -l "$lib" 2>/dev/null | grep -c "GNU_RELRO" || true)
+          # Run each tool once and check it succeeded, so a tool failure is
+          # reported as such instead of masquerading as a zero match.
+          if disasm=$(objdump -d "$lib" 2>/dev/null); then
+            vz=$(printf '%s\n' "$disasm" | grep -c "vzeroupper" || true)
+            fma=$(printf '%s\n' "$disasm" | grep -ciE "vfmadd|vfmsub" || true)
+            sp=$(printf '%s\n' "$disasm" | grep -c "__stack_chk_fail" || true)
+          else
+            echo "::error::objdump -d failed on $lib — cannot verify ISA usage" >&2
+            failed=1
+            vz="tool-error"; fma="tool-error"; sp="tool-error"
+          fi
 
-          printf "%-30s %s\n" "vzeroupper (-mvzeroupper):" "$vz"
-          printf "%-30s %s\n" "FMA instructions (-march=bdver2):" "$fma"
-          printf "%-30s %s\n" "stack_chk_fail (protector):" "$sp"
-          printf "%-30s %s\n" ".text subsections (LTO):" "$lto"
-          printf "%-30s %s\n" "RELRO:" "$relro"
+          if sections=$(readelf -S "$lib" 2>/dev/null); then
+            lto=$(printf '%s\n' "$sections" | grep -c '\.text\.' || true)
+          else
+            echo "::error::readelf -S failed on $lib — cannot verify LTO section layout" >&2
+            failed=1
+            lto="tool-error"
+          fi
 
-          rm -rf "$workdir"
+          printf "%-34s %s\n" "vzeroupper (-mvzeroupper):" "$vz"
+          printf "%-34s %s\n" "FMA instructions (-march=bdver2):" "$fma"
+          printf "%-34s %s\n" "stack_chk_fail (protector):" "$sp"
+          printf "%-34s %s\n" ".text subsections (LTO):" "$lto"
+
+          echo ""
+          echo "--- Hardening ---"
+          if ! segments=$(readelf -l "$lib" 2>/dev/null); then
+            echo "::error::readelf -l failed — cannot verify RELRO" >&2
+            failed=1
+          elif printf '%s\n' "$segments" | grep -q "GNU_RELRO"; then
+            echo "RELRO: yes"
+          else
+            echo "RELRO: NO"
+            failed=1
+          fi
+
+          echo ""
+          if [ "$failed" -ne 0 ]; then
+            echo "::error::Build flag / hardening verification failed — review output above" >&2
+            exit 1
+          fi
+          echo "All checks passed."
 
       - name: Upload RPMs
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
