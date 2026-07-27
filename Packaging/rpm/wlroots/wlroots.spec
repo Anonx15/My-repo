@@ -68,14 +68,16 @@ export LDFLAGS="%{build_ldflags} %{?bdver2_ldflags}"
 %install
 %meson_install
 
+# wlroots 0.20 uses versioned soname in the filename itself
+# (libwlroots-0.20.so) with no traditional .so.X.Y.Z symlinks.
+# The .so file IS the runtime library, not a devel symlink.
 %files
 %license LICENSE
 %doc README.md
-%{_libdir}/libwlroots-%{wlroots_soname}.so.*
+%{_libdir}/libwlroots-%{wlroots_soname}.so
 
 %files devel
 %{_includedir}/wlr/
-%{_libdir}/libwlroots-%{wlroots_soname}.so
 %{_libdir}/pkgconfig/wlroots-%{wlroots_soname}.pc
 
 %changelog
