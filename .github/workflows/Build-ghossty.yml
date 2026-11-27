@@ -11,17 +11,18 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  GHOSTTY_REF: 332b2aefc6e72d363aa93ab6ecfc86eeeeb5ed28
-  ZIG_VERSION: "0.15.2"
-  ZIG_SHA256: 02aa270f183da276e5b5920b1dac44a63f1a49e55050ebde3aecc9eb82f93239
+  GHOSTTY_VERSION: "1.4.0"
+  GHOSTTY_REF: "83fb95624b0439ee660c2679b43b38c8b63769cd" # tag v1.4.0
+  ZIG_VERSION: "0.17.1"
+  ZIG_SHA256: "3581863e3cbcfd0fce0efc682ce7e9e93da96668a977791d356a26d2a7e9b17a"
 
 jobs:
   build:
-    name: Build Ghostty RPM
+    name: Build Ghostty RPM (Fedora 45 / KDE Plasma)
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: 90
     container:
-      image: fedora@sha256:6c75d5bf57cb0fa5aa4b92c6a83c86c791644496d9ac230de7711f5b8ec3b898 # Fedora 44
+      image: fedora@sha256:a7d72ba2745b100a3351087472e5ee7b2450af7cf331e7673007e3817612839c # Fedora 45
 
     steps:
       - name: Checkout workflow repo
@@ -30,7 +31,7 @@ jobs:
           path: myrepo
           persist-credentials: false
 
-      - name: Install dependencies
+      - name: Install build dependencies
         run: |
           dnf install -y \
             git \
@@ -38,28 +39,24 @@ jobs:
             xz \
             tar \
             rpm-build \
-            rpmdevtools \
-            scdoc \
+            systemd-rpm-macros \
             gtk4-devel \
             libadwaita-devel \
             gtk4-layer-shell-devel \
+            libglvnd-devel \
             fontconfig-devel \
-            harfbuzz-devel \
             wayland-devel \
             wayland-protocols-devel \
             libxkbcommon-devel \
             gettext \
             blueprint-compiler \
-            libxml2-devel \
-            glib2-devel \
-            pango-devel \
             pkgconf-pkg-config \
             ncurses
 
       - name: Download Zig
         run: |
           archive="zig-x86_64-linux-${ZIG_VERSION}.tar.xz"
-          wget --https-only -q \
+          wget --https-only --tries=3 -q \
             "https://ziglang.org/download/${ZIG_VERSION}/${archive}" \
             -O "${archive}"
           echo "${ZIG_SHA256}  ${archive}" | sha256sum --check --strict
@@ -74,48 +71,46 @@ jobs:
           path: ghostty
           persist-credentials: false
 
-      - name: Setup rpmbuild tree
-        run: rpmdev-setuptree
-
-      - name: Fetch Zig dependencies
-        working-directory: ghostty
-        run: zig build --fetch
-
       - name: Build Ghostty
         working-directory: ghostty
         run: |
+          zig version
           zig build \
             -Doptimize=ReleaseFast \
             -Dcpu=bdver2 \
             -Dpie=true \
             -Dstrip=true \
+            -Dversion-string="${GHOSTTY_VERSION}" \
+            -Dinstalled-exe-path=/usr/bin/ghostty \
             -Dfont-backend=fontconfig_freetype \
             -Dgtk-x11=false \
             -Dgtk-wayland=true \
             -Drenderer=opengl \
+            -Demit-docs=false \
+            -Di18n=false \
             -fsys=fontconfig \
-            -fsys=harfbuzz \
             -fsys=gtk4-layer-shell \
-            -p $PWD/output
+            -p "$PWD/output"
 
       - name: Show build output structure
         run: find ghostty/output -type f | sort
 
-      - name: Prepare RPM sources
+      - name: Prepare rpmbuild tree and sources
         run: |
-          cp myrepo/Packaging/rpm/ghostty/ghostty.spec ~/rpmbuild/SPECS/ghostty.spec
-          cp myrepo/Packaging/rpm/ghostty/com.mitchellh.ghostty.desktop ~/rpmbuild/SOURCES/
-          cp -r ghostty/output ~/rpmbuild/SOURCES/output
+          mkdir -p rpmbuild/{BUILD,BUILDROOT,RPMS,SOURCES,SPECS,SRPMS}
+          cp myrepo/Packaging/rpm/ghostty/ghostty.spec rpmbuild/SPECS/ghostty.spec
+          cp -a ghostty/output rpmbuild/SOURCES/output
 
       - name: Build RPM
         run: |
           rpmbuild -bb \
-            --define "_sourcedir $HOME/rpmbuild/SOURCES" \
-            ~/rpmbuild/SPECS/ghostty.spec
+            --define "_topdir ${{ github.workspace }}/rpmbuild" \
+            --define "_sourcedir ${{ github.workspace }}/rpmbuild/SOURCES" \
+            rpmbuild/SPECS/ghostty.spec
 
       - name: Upload RPM
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: ghostty-1.3.1-fc44.rpm
-          path: /github/home/rpmbuild/RPMS/x86_64/*.rpm
-          retention-days: 7
+          name: ghostty-${{ env.GHOSTTY_VERSION }}-fc45-bdver2.rpm
+          path: rpmbuild/RPMS/x86_64/*.rpm
+          retention-days: 15
